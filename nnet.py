@@ -1,12 +1,14 @@
 import tools
 import numpy as np
 import cudamat as cm
+import Optimizer as Optimizer
 
 def class NNet:
 
     def __init__(self, params):
 
         self.params = params
+        self.optimizer = Optimizer(params)
         self.weights = []
         self.bias = []
         for pair in zip(layers[0:-1],layers[1:]):
@@ -26,10 +28,6 @@ def class NNet:
 
     def der(z):
 
-    def updateWeight(W, update):
-
-    def updateBias(b, update):
-        
     def calculateCost(image, output):
 
     def prop(image):
@@ -50,9 +48,9 @@ def class NNet:
             deltas.insert(weights[i].T * deltas[0] .* der(i-1),0)
         for i in range(0,len(weights)):
             updateW = deltas[i]*a[i].T
-            updateWeight(weights[i],updateW)
+            self.optimizer.updateWeight(weights[i],updateW)
             updateB = deltas[i]
-            updateBias(bias[i],updateB)
+            self.optimizer.updateBias(bias[i],updateB)
 
         return cost
 
