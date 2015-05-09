@@ -30,7 +30,7 @@ def class NNet:
 
     def calculateCost(image, output):
 
-    def prop(image):
+    def forwardProp(image):
 
         activations = [image]
         inputs = []
@@ -40,19 +40,22 @@ def class NNet:
             inputs.append(z)
             activations.append(act(z))
 
-        output = activations.remove(-1)
+        output = activations[-1]
         cost = calculateCost(image,output)
-        deltas = [-(output - image)*der(inputs[-1])]
+        return [inputs, activations,cost]
+
+    def backProp(inputs, activations):    
+
+        output = activations.remove(-1)
+        deltas = [-(output - image)*der(inputs[-1],output)]
         
         for i in range(1,len(weights)).reverse():
-            deltas.insert(weights[i].T * deltas[0] .* der(i-1),0)
+            deltas.insert(weights[i].T * deltas[0] .* der(inputs[i-1],activations[i]),0)
         for i in range(0,len(weights)):
             updateW = deltas[i]*a[i].T
             self.optimizer.updateWeight(weights[i],updateW)
             updateB = deltas[i]
             self.optimizer.updateBias(bias[i],updateB)
-
-        return cost
 
     def run():
         for epoch in self.epochs:
