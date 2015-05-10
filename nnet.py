@@ -10,7 +10,7 @@ class nnet(object):
 
         self.outputNum = 3
         self.units = 16
-        self.learningRate = .1
+        self.learningRate = .5
         self.activations = []
         self.inputs = []
         self.weights = []
@@ -24,7 +24,7 @@ class nnet(object):
             temp = np.zeros((self.units))
             temp[i+1] = 1
             self.images.append(temp)
-
+        
     def act(self,z):
 
         return np.divide(1,(np.add(1,np.exp(np.multiply(-1,z)))))
@@ -38,8 +38,7 @@ class nnet(object):
         c = []
         for i in range(0,self.outputNum+1):
             dif = self.activations[i] - self.images[i]
-            temp = 1/2 * np.dot(dif,dif)
-            c.append(temp)
+            c.append(1.0/2 * np.dot(dif,dif))
         return c
 
     def forwardProp(self):
@@ -58,9 +57,9 @@ class nnet(object):
         
         for i in range(1,len(self.weights))[::-1]:
             deltaRight = np.dot(self.weights[i].T * deltas[-1], self.der(self.inputs[i-1]))
-            deltaBottom = np.dot(-(output - self.images[i]),self.der(self.inputs[i-1]))
-            deltas.insert(deltaRight + deltaBottom)
-        for i in range(0,len(weights)):
+            deltaBottom = np.dot(-(self.activations[i] - self.images[i]),self.der(self.inputs[i-1]))
+            deltas.append(deltaRight + deltaBottom)
+        for i in range(0,len(self.weights)):
             updateW = np.dot(deltas[i],self.activations[i].T)
             self.weights[i] = self.weights[i] - self.learningRate*updateW
             updateB = deltas[i]
@@ -75,6 +74,13 @@ class nnet(object):
         array = np.reshape(self.activations[i],(np.sqrt(self.units),np.sqrt(self.units)))
         plt.imshow(array,cmap=plt.cm.gray)
         plt.show()
+
+    def run(self):
+
+        while(True):
+            self.forwardProp()
+            self.backProp()
+            print self.cost()
 
 
         
