@@ -1,67 +1,80 @@
 import tools
 import numpy as np
-import cudamat as cm
-import Optimizer as Optimizer
+from scipy import misc
+import matplotlib.pyplot as plt
+import math
 
-def class NNet:
+class nnet(object):
 
-    def __init__(self, params):
+    def __init__(self):
 
-        self.params = params
-        self.optimizer = Optimizer(params)
+        self.outputNum = 3
+        self.units = 16
+        self.learningRate = .1
+        self.activations = []
+        self.inputs = []
         self.weights = []
         self.bias = []
-        for pair in zip(layers[0:-1],layers[1:]):
-            #create matrics and bias terms
-        for W in weights:
-            initializeWeights(W)
-        for b in bias:
-            initializeBias(b)
-    
-    def initializeWeights(W):
+        self.image = np.zeros((self.units))
+        self.image[0] = 1
+        self.images = [self.image]
+        for i in range(0,self.outputNum):
+            self.weights.append(np.zeros((self.units,self.units)))
+            self.bias.append(np.zeros((self.units)))
+            temp = np.zeros((self.units))
+            temp[i+1] = 1
+            self.images.append(temp)
 
-    def initializeBias(b):
-        
-    def getImage(im):
+    def act(self,z):
 
-    def act(z):
+        return np.divide(1,(np.add(1,np.exp(np.multiply(-1,z)))))
 
-    def der(z):
+    def der(self,z):
 
-    def calculateCost(image, output):
+        return self.act(z) * (1 - self.act(z))
 
-    def forwardProp(image):
+    def cost(self):
 
-        activations = [image]
-        inputs = []
+        c = []
+        for i in range(0,self.outputNum+1):
+            dif = self.activations[i] - self.images[i]
+            temp = 1/2 * np.dot(dif,dif)
+            c.append(temp)
+        return c
+
+    def forwardProp(self):
+
+        self.activations = [self.images[0]]
+        self.inputs = []
 
         for W, b in zip(self.weights,self.bias):
-            z = W*activations[-1] + b
-            inputs.append(z)
-            activations.append(act(z))
+            z = np.dot(W,self.activations[-1]) + b
+            self.inputs.append(z)
+            self.activations.append(self.act(z))
 
-        output = activations[-1]
-        cost = calculateCost(image,output)
-        return [inputs, activations,cost]
+    def backProp(self):
 
-    def backProp(inputs, activations):    
-
-        output = activations.remove(-1)
-        deltas = [-(output - image)*der(inputs[-1],output)]
+        deltas = [np.dot(-(self.activations[-1] - self.images[-1]),self.der(self.inputs[-1]))]
         
-        for i in range(1,len(weights)).reverse():
-            deltas.insert(weights[i].T * deltas[0] .* der(inputs[i-1],activations[i]),0)
+        for i in range(1,len(self.weights))[::-1]:
+            deltaRight = np.dot(self.weights[i].T * deltas[-1], self.der(self.inputs[i-1]))
+            deltaBottom = np.dot(-(output - self.images[i]),self.der(self.inputs[i-1]))
+            deltas.insert(deltaRight + deltaBottom)
         for i in range(0,len(weights)):
-            updateW = deltas[i]*a[i].T
-            self.optimizer.updateWeight(weights[i],updateW)
+            updateW = np.dot(deltas[i],self.activations[i].T)
+            self.weights[i] = self.weights[i] - self.learningRate*updateW
             updateB = deltas[i]
-            self.optimizer.updateBias(bias[i],updateB)
+            self.bias[i] = self.bias[i] - self.learningRate*updateB
 
-    def run():
-        for epoch in self.epochs:
-            for im in range(0,self.numImages):
-                image = getImage(im)
-                cost = prop(image)
-                print "Iteration " + im + " Cost: " + cost
-        
+    def viewImage(self,i):
+        array = np.reshape(self.images[i],(np.sqrt(self.units),np.sqrt(self.units)))
+        plt.imshow(array,cmap=plt.cm.gray)
+        plt.show()
+
+    def viewOutput(self,i):
+        array = np.reshape(self.activations[i],(np.sqrt(self.units),np.sqrt(self.units)))
+        plt.imshow(array,cmap=plt.cm.gray)
+        plt.show()
+
+
         
