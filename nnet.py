@@ -8,22 +8,28 @@ class nnet(object):
 
     def __init__(self):
 
-        self.outputNum = 3
-        self.units = 16
+        self.units = 2048
+        self.layers = 1
+        self.inputSize = 64*64 #64 x 64 images, 
         self.learningRate = .5
+        self.seqLen = 10
         self.activations = []
         self.inputs = []
-        self.weights = []
-        self.bias = []
-        self.image = np.zeros((self.units))
-        self.image[0] = 1
-        self.images = [self.image]
-        for i in range(0,self.outputNum):
-            self.weights.append(np.zeros((self.units,self.units)))
-            self.bias.append(np.zeros((self.units)))
-            temp = np.zeros((self.units))
-            temp[i+1] = 1
-            self.images.append(temp)
+        self.encoder = []
+        self.decoder = []
+        self.inputDecoder = []
+        self.future = []
+        self.inputFuture = []
+        self.scale = 1/np.sqrt(64) #intialize weights to [-1/sqrt(fan-in),1/sqrt(fan-in)]
+        self.weightEncoder = np.random.uniform(-self.scale,self.scale,self.units,self.units)
+        self.weightDecoder = np.random.uniform(-self.scale,self.scale,self.units,self.units)
+        self.weightFuture = np.random.uniform(-self.scale,self.scale,self.units,self.units)
+        self.weightBetween = np.random.uniform(-self.scale,self.scale,self.units,self.units)
+        self.weightInput = np.random.uniform(-self.scale,self.scale,self.units,self.inputSize)
+        self.bias = np.zeros((self.units))
+        self.createDataset()
+
+    def createDataset(self):
         
     def act(self,z):
 
@@ -41,29 +47,73 @@ class nnet(object):
             c.append(1.0/2 * np.dot(dif,dif))
         return c
 
-    def forwardProp(self):
+    # factor in bias, reintialize matrixes back to 0
 
-        self.activations = [self.images[0]]
-        self.inputs = []
+    def forwardProp(self,images,imagesDecoder,imagesFuture):
 
-        for W, b in zip(self.weights,self.bias):
-            z = np.dot(W,self.activations[-1]) + b
-            self.inputs.append(z)
-            self.activations.append(self.act(z))
-
-    def backProp(self):
-
-        deltas = [np.dot(-(self.activations[-1] - self.images[-1]),self.der(self.inputs[-1]))]
+        # Encoder
         
-        for i in range(1,len(self.weights))[::-1]:
-            deltaRight = np.dot(self.weights[i].T * deltas[-1], self.der(self.inputs[i-1]))
-            deltaBottom = np.dot(-(self.activations[i] - self.images[i]),self.der(self.inputs[i-1]))
-            deltas.append(deltaRight + deltaBottom)
-        for i in range(0,len(self.weights)):
-            updateW = np.dot(deltas[i],self.activations[i].T)
-            self.weights[i] = self.weights[i] - self.learningRate*updateW
-            updateB = deltas[i]
-            self.bias[i] = self.bias[i] - self.learningRate*updateB
+        self.encoder = [np.zeros((self.units,self.units))]
+
+        for i in range(0,len(images)):
+            self.inputImage.append(np.dot(self.weightInput,images[i]))
+            self.inputPast.append(np.dot(self.weightEncoder,self.encoder[-1]))
+            self.inputEncoder.append(self.inputPast[-1] + self.inputPast[-1])
+            self.encoder.append(self.act(self.inputEncoder[-1]))
+
+        self.encoder.remove(0)
+
+        # Decoder
+
+        self.inputDecoder.append(np.dot(self.weightBetween,self.encoder[-1])])
+        self.decoder = []
+
+        for i in range(0,len(imagesDecoder)):
+            self.decoder.append(self.act(self.inputDecoder[-1]))
+            self.inputDecoder.append(np.dot(self.weightDecoder,self.decoder[-1]))
+
+    # Function: backProp(self, images, imagesDecoder, imagesFuture):
+    # ------------------------------------------------------
+    # BPTT using 'imagesDecoder' as groundtruth for decoder and 
+    # 'imagesFuture' as groundtruth for future. Images are
+    # the input images to encoder. Euclidean loss function.
+
+    def backProp(self,imagesEncoder,imagesDecoder,imagesFuture):
+
+        # Decoder
+
+        deltasDecoder.append(np.dot((self.decoder[-1] - self.imagesDecoder[-1]),self.der(self.inputDecoder[-1]))])
+
+        for i in range(0,len(imagesDecoder) - 1)[::-1]:
+            deltaTimeDecoder = np.dot(self.weightDecoder.T * deltasDecoder[-1], self.der(self.inputDecoder[i]))
+            deltaImageDecoder = np.dot((self.decoder[i] - self.images[i]),self.der(self.inputDecoder[i]))
+            deltasDecoder.append(deltaImageDecoder + deltaTimeDecoder)
+
+        # Encoder
+
+        delta = np.dot(self.weightBetween.T * deltaDecoder[-1], self.der(self.inputEncoder[-1]))
+        deltaTimeEncoder = [np.dot(delta,self.der(self.inputTime[-1]))]
+        deltaImageEncoder = [np.dot(delta,self.der(self.inputImage[-1]))]
+                             
+        for i in range(0,len(imagesEncoder) - 1)[::-1]:
+            delta = np.dot(self.weightEncoder.T * deltaTime[-1], self.der(self.inputEncoder[i])))
+            deltaTimeEncoder.append(np.dot(delta,self.der(self.inputTime[i])))
+            deltaImageEncoder.append(np.dot(delta,self.der(self.inputImage[i])))
+
+        updateW = np.sum(np.dot(deltasDecoder[0:-1],self.decoder[-1::])
+        self.weightDecoder = self.weightDecoder - self.learningRate*updateW
+
+        updateW = np.sum(np.dot(deltasDecoder[-1],self.encoder[-1])
+        self.weightBetween = self.weightBetween - self.learningRate*updateW
+
+        updateW = np.sum(np.dot(deltasTimeEncoder[0:-1],self.encoder[-1::])
+        self.weightEncoder = self.weightEncoder - self.learningRate*updateW
+
+        updateW = np.sum(np.dot(deltasImageEncoder[0:-1],self.imagesEncoder[-1::])
+        self.weightInput = self.weightInput - self.learningRate*updateW
+
+        updateB = deltas[i]
+        self.bias[i] = self.bias[i] - self.learningRate*updateB
 
     def viewImage(self,i):
         array = np.reshape(self.images[i],(np.sqrt(self.units),np.sqrt(self.units)))
