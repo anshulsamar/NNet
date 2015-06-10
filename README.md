@@ -1,1 +1,12 @@
-In progress
+Todo:
+- LSTM
+- Bias units
+- Cudamat
+- Input images
+- Weight intialization
+- Loss function
+- More layers, convolutions
+- Optimization algorithm
+- Script to run on deeps, log/restart experiments
+- Paper reading list
+- reintilize matrixes to zero in forward prop

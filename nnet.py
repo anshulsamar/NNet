@@ -4,36 +4,71 @@ from scipy import misc
 import matplotlib.pyplot as plt
 import math
 
+# nnet
+# ------------------------
+# This neural network architecture is built upon "Unsupervised Learning of
+# Video Representations using LSTMs" by Srivastava, et al. Let 'N' represent a
+# neuron, 'I' an image, '^','->','->>','>>>','-->' all represent different
+# weights and connections ('|' is not a weight). The following is a visual
+# representation of this network for a sequence of three images (without bias
+# terms). The output of each decoder/future neuron is compared against
+# groundtruth. 
+# 
+# Encoder:        Decoder:
+#
+# N -> N -> N -> N --> N ->> N ->> N ->> N
+# ^    ^    ^    ^     |     |     |     |
+# I1   I2   I3   I4    I4    I3    I2    I1
+#
+#                 Future:
+
+#                   --> N >>> N >>> N >>> N
+#                       |     |     |     |
+#                       I5    I6    I7    I8
+#
+# Check the README for current work list. Built on python, numpy, & cudamat.
+
 class nnet(object):
 
     def __init__(self):
 
+        # Network parameters
         self.units = 2048
         self.layers = 1
-        self.inputSize = 64*64 #64 x 64 images, 
+        self.inputSize = 64*64
         self.learningRate = .5
-        self.seqLen = 10
-        self.activations = []
+        self.scale1 = 1/np.sqrt(self.inputSize)
+        self.scale2 = 1/np.sqrt(self.units)
+        
+        # Network weights and structures. 
+        # Intialized to scale 1/sqrt(fan-in)
+        # Bias terms intialized to zero.
+        # Weight symbols: ^, ->, -->, ->>, >>>
         self.inputs = []
         self.encoder = []
+        self.inputImage = []
+        self.inputEncoderPast = []
         self.decoder = []
         self.inputDecoder = []
         self.future = []
         self.inputFuture = []
-        self.scale = 1/np.sqrt(64) #intialize weights to [-1/sqrt(fan-in),1/sqrt(fan-in)]
-        self.weightEncoder = np.random.uniform(-self.scale,self.scale,self.units,self.units)
-        self.weightDecoder = np.random.uniform(-self.scale,self.scale,self.units,self.units)
-        self.weightFuture = np.random.uniform(-self.scale,self.scale,self.units,self.units)
-        self.weightBetween = np.random.uniform(-self.scale,self.scale,self.units,self.units)
-        self.weightInput = np.random.uniform(-self.scale,self.scale,self.units,self.inputSize)
-        self.bias = np.zeros((self.units))
+        self.weightImage = np.random.uniform(-self.scale,self.scale,self.units,self.inputSize)
+        self.weightEncoder = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        self.weightBetween = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        self.weightDecoder = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        self.weightFuture = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        self.biasImage = np.zeros((self.units))
+        self.biasDecoder = np.zeros((self.units))
+        self.biasFuture = np.zeros((self.units))
+
+        # Create Toy Dataset
         self.createDataset()
 
     def createDataset(self):
         
     def act(self,z):
 
-        return np.divide(1,(np.add(1,np.exp(np.multiply(-1,z)))))
+        return 1/(1 + np.exp(-1 * z))
 
     def der(self,z):
 
@@ -47,73 +82,160 @@ class nnet(object):
             c.append(1.0/2 * np.dot(dif,dif))
         return c
 
-    # factor in bias, reintialize matrixes back to 0
+    # forwardProp(self, encoderImages, decoderImages, futureImages)
+    # -------------------------------------------------------------
+    # Each encoder neuron (i) receives self.inputEncoder[i] as input. This
+    # consists of the output of the previous encoder neuron
+    # (self.inputEncoderPast[i]) and the weighted image
+    # (self.inputImage[i]). The output of each encoder neuron is stored in
+    # self.encoder. The first input to the decoder is the output of the last
+    # encoder neuron times self.weightBetween. After, each decoder neuron (i)
+    # receives self.inputDecoder[i] as input. The output of each decoder neuron
+    # is stored in self.decoder. 
 
-    def forwardProp(self,images,imagesDecoder,imagesFuture):
+    def forwardProp(self,encoderImages,decoderImages,futureImages):
 
-        # Encoder
-        
+        # Encoder    
         self.encoder = [np.zeros((self.units,self.units))]
 
-        for i in range(0,len(images)):
-            self.inputImage.append(np.dot(self.weightInput,images[i]))
-            self.inputPast.append(np.dot(self.weightEncoder,self.encoder[-1]))
-            self.inputEncoder.append(self.inputPast[-1] + self.inputPast[-1])
-            self.encoder.append(self.act(self.inputEncoder[-1]))
+        for i in range(0,len(encoderImages)):
+            self.inputImage.append(np.dot(self.weightImage,encoderImages[i]) + self.biasImage)
+            self.inputEncoderPast.append(np.dot(self.weightEncoder,self.encoder[i]))
+            self.inputEncoder.append(self.inputPast[i] + self.inputEncoderPast[i])
+            self.encoder.append(self.act(self.inputEncoder[i]))
 
         self.encoder.remove(0)
 
         # Decoder
-
-        self.inputDecoder.append(np.dot(self.weightBetween,self.encoder[-1])])
+        self.inputDecoder = [np.dot(self.weightBetween,self.encoder[-1]) + self.biasDecoder]
         self.decoder = []
 
-        for i in range(0,len(imagesDecoder)):
-            self.decoder.append(self.act(self.inputDecoder[-1]))
-            self.inputDecoder.append(np.dot(self.weightDecoder,self.decoder[-1]))
+        for i in range(0,len(decoderImages)):
+            self.decoder.append(self.act(self.inputDecoder[i]))
+            self.inputDecoder.append(np.dot(self.weightDecoder,self.decoder[i]))
 
-    # Function: backProp(self, images, imagesDecoder, imagesFuture):
+        # Future
+        self.inputFuture = [np.dot(self.weightBetween,self.encoder[-1]) + self.biasEncoder]
+        self.future = []
+
+        for i in range(0,len(futureImages)):
+            self.future.append(self.act(self.inputFuture[i]))
+            self.inputFuture.append(np.dot(self.weightFuture,self.future[i]))
+
+    # Function: backProp(self, encoderImages, decoderImagesDecoder,
+    # imagesFuture):
     # ------------------------------------------------------
-    # BPTT using 'imagesDecoder' as groundtruth for decoder and 
-    # 'imagesFuture' as groundtruth for future. Images are
-    # the input images to encoder. Euclidean loss function.
+    #
+    # Decoder and Future
+    # ------------------
+    # We use a Euclidian loss function: 1/2 ||y - f||^2, where f is the output
+    # of our neuron and y is the groundtruth. Let zi be the input into the
+    # neuron (i). We first calculate dE/dzi for every neuron. Starting at the right most
+    # end of the decoder, we have dE/dz4 = (h - f(z4))*f'(z4). Store this in
+    # deltasDecoder[3]. For the next neuron, we have dE/dz3 = d(E' + E'')/dz3,
+    # where dE'/dz3 is the error from the immediate groundtruth (I2), calculated just
+    # like above. We store this in deltaImageDecoder. E'' is the error from the
+    # groundtruth (I1) propogated through the weight (->>). Lets call this
+    # weight W. We have d(E'')/dz3 = d(E'')/dz4 * dz3/dz3. Note that z4 =
+    # W*f(z3). Thus dz4/dz3 = W*f'(z3). Thus 
+    # d(E'')/dz3 = d(E'')/dz4 * W * f'(z3). The first term has already been
+    # computed and stored in deltasDecoder[3]. We calculate d(E'')/dz3  and store it
+    # in deltaTimeDecoder. Our final dE/dz3 is deltaTimeDecoder +
+    # deltaImageDecoder. We store this in deltasDecoder[2]. We will calculate
+    # one more for clarity. For the next neuron, we have dE/dz2 = d(E' + E'' +
+    # E''')/dz3, where E',E'' are above and E''' is the error from the immediate
+    # groundtruth (I3) calculated just like above. We store that in
+    # deltaImageDecoder[1]. Note that d(E' + E'')/dz3 = d(E' + E'')/dz2 * dz2/dz3
+    # which is the deltaImageDecoder[2] * W * f'(z2). We store d(E' + E'')/dz3
+    # in deltaTimeDecoder[1]. We add these deltas together to get deltasDecoder[1].
+    # The procedure is exactly the same for the Future module, except we use
+    # different images to calculate error (namely, images in the future).
+    #
+    # Encoder
+    # ------------------
+    # We look at the right most encoder neuron, (i). Using the same reasoning as
+    # above we have, dE/dzi = d(E_decoder)/dzi + d(E_future)/dzi = WBetween *
+    # (deltaDecoder[0] + deltaFuture[0]) * f'(zi), where E_decoder and E_future
+    # are the sum of errors from the image errors of the decoder and future
+    # respectively, i.e E_decoder = E' + E'' + .... We store this total delta in
+    # deltasEncoder. Note that each neuron
+    # receives input from two sources (its previous time and the image). Thus,
+    # dE/dzImage = dE/dzi * dzi/dzImage =  dE/dzi * (dzImage + dzTime)/dzImage =
+    # dE/dzi = dE/dzTime. Thus, it is sufficient to only calculate one delta for
+    # each neuron in the Encoder. 
+    # 
+    # Weight Update
+    # -------------------
+    # Note that for neuron (i) and the weights W entering it, dE/dW = dE/dzi *
+    # dzi/dW. Note that zi = W*f(z(i-1)). Thus dzi/dW is the activation of the
+    # previous neuron. Thus dE/dW = deltaDecoder[i]*decoder[i-1]. Because our
+    # weights are the same, our effective dE/dW = deltaDecoder[1::] *
+    # decoder[0:-1]. This also holds for Future. Using
+    # the same reasoning, for the weight in between encoder and decoder/future,
+    # we have dE/dW =  deltaDecoder[0]*encoder[-1] + deltaFuture[0]*encoder[-1] =
+    # (deltaDecoder[0] + deltaFuture[0]) * encoder[-1]. For the encoder weight,
+    # we have dE/dW = deltaEncoder[i]*encoder[i-1] and because the encoder
+    # weights are the same, our effective dE/dW = deltaEncoder[1::] *
+    # encoder[0:-1]. For the input image weight, we have dE/dw =
+    # deltaEncoder[i]*imagesEncoder[i]. Thus, because input weights are the
+    # same, our effective dE/dW = deltaEncoder*imagesEncoder.
+    # 
+    # Optimization
+    # ------------------
+    # Stochastic gradient descent. We multiply derivatives above times a learning rate
+    # and subtract it from the current weight. 
 
     def backProp(self,imagesEncoder,imagesDecoder,imagesFuture):
 
         # Decoder
-
-        deltasDecoder.append(np.dot((self.decoder[-1] - self.imagesDecoder[-1]),self.der(self.inputDecoder[-1]))])
+        deltasDecoder = [None] * len(imagesDecoder)
+        deltasDecoder[-1] = np.dot((self.decoder[-1] - self.imagesDecoder[-1]),self.der(self.inputDecoder[-1]))]
 
         for i in range(0,len(imagesDecoder) - 1)[::-1]:
-            deltaTimeDecoder = np.dot(self.weightDecoder.T * deltasDecoder[-1], self.der(self.inputDecoder[i]))
-            deltaImageDecoder = np.dot((self.decoder[i] - self.images[i]),self.der(self.inputDecoder[i]))
-            deltasDecoder.append(deltaImageDecoder + deltaTimeDecoder)
+            deltaTimeDecoder = np.dot(self.weightDecoder.T * deltasDecoder[i+1], self.der(self.inputDecoder[i]))
+            deltaImageDecoder = np.dot((self.decoder[i] - self.imagesDecoder[i]),self.der(self.inputDecoder[i]))
+            deltasDecoder[i] = deltaImageDecoder + deltaTimeDecoder
+
+        # Future
+        deltasFuture = [None] * len(imagesFuture)
+        deltasFuture[-1] = np.dot((self.future[-1] - self.imagesFuture[-1]),self.der(self.inputFuture[-1]))]
+
+        for i in range(0,len(imagesFuture) - 1)[::-1]:
+            deltaTimeFuture = np.dot(self.weightFuture.T * deltasFuture[i+1], self.der(self.inputFuture[i]))
+            deltaImageFuture = np.dot((self.future[i] - self.imagesFuture[i]),self.der(self.inputFuture[i]))
+            deltasFuture[i] = deltaImageFuture + deltaTimeFuture
 
         # Encoder
-
-        delta = np.dot(self.weightBetween.T * deltaDecoder[-1], self.der(self.inputEncoder[-1]))
-        deltaTimeEncoder = [np.dot(delta,self.der(self.inputTime[-1]))]
-        deltaImageEncoder = [np.dot(delta,self.der(self.inputImage[-1]))]
+        deltasEncoder = [None] * len(imagesEncoder)
+        deltasEncoder[-1] = np.dot(self.weightBetween.T * (deltaDecoder[0] + deltaFuture[0]), self.der(self.inputEncoder[-1]))
                              
         for i in range(0,len(imagesEncoder) - 1)[::-1]:
-            delta = np.dot(self.weightEncoder.T * deltaTime[-1], self.der(self.inputEncoder[i])))
-            deltaTimeEncoder.append(np.dot(delta,self.der(self.inputTime[i])))
-            deltaImageEncoder.append(np.dot(delta,self.der(self.inputImage[i])))
+            deltasEncoder.append(np.dot(self.weightEncoder.T * deltasEncoder[i+1], self.der(self.inputEncoder[i]))))
 
-        updateW = np.sum(np.dot(deltasDecoder[0:-1],self.decoder[-1::])
+        # Updates
+        updateW = np.sum(np.dot(deltasDecoder[1::],self.decoder[0:-1])
         self.weightDecoder = self.weightDecoder - self.learningRate*updateW
 
-        updateW = np.sum(np.dot(deltasDecoder[-1],self.encoder[-1])
+        updateW = np.sum(np.dot(deltasFuture[1::],self.future[0:-1])
+        self.weightFuture = self.weightFuture - self.learningRate*updateW
+
+        updateW = np.sum(np.dot(deltasDecoder[0] + deltasFuture[0],self.encoder[-1])
         self.weightBetween = self.weightBetween - self.learningRate*updateW
 
-        updateW = np.sum(np.dot(deltasTimeEncoder[0:-1],self.encoder[-1::])
+        updateB = deltasDecoder[0]
+        self.biasDecoder = self.biasDecoder - self.learningRate*updateB                        
+        
+        updateB = deltasFuture[0]
+        self.biasFuture = self.biasFuture - self.learningRate*updateB                        
+
+        updateW = np.sum(np.dot(deltasEncoder[1::],self.encoder[0:-1])
         self.weightEncoder = self.weightEncoder - self.learningRate*updateW
 
-        updateW = np.sum(np.dot(deltasImageEncoder[0:-1],self.imagesEncoder[-1::])
-        self.weightInput = self.weightInput - self.learningRate*updateW
+        updateW = np.sum(np.dot(deltasImageEncoder,self.imagesEncoder)
+        self.weightImage = self.weightInput - self.learningRate*updateW
 
-        updateB = deltas[i]
-        self.bias[i] = self.bias[i] - self.learningRate*updateB
+        updateB = np.sum(deltasImageEncoder)
+        self.biasFuture = self.biasFuture - self.learningRate*updateB                        
 
     def viewImage(self,i):
         array = np.reshape(self.images[i],(np.sqrt(self.units),np.sqrt(self.units)))
