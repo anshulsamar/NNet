@@ -1,8 +1,11 @@
-import tools
 import numpy as np
 from scipy import misc
+import matplotlib.animation as ani
 import matplotlib.pyplot as plt
-import math
+import matplotlib.cm as cm
+import os
+import pickle
+import pdb
 
 # nnet
 # ------------------------
@@ -35,15 +38,18 @@ class nnet(object):
         # Network parameters
         self.units = 2048
         self.layers = 1
-        self.inputSize = 64*64
+        self.inputSize = 64*64 # Must be a square if using createTrainSet()
         self.learningRate = .5
+        self.encoderLen = 10
+        self.decoderLen = 10
+        self.futureLen = 10
         self.scale1 = 1/np.sqrt(self.inputSize)
         self.scale2 = 1/np.sqrt(self.units)
         
         # Network weights and structures. 
         # Intialized to scale 1/sqrt(fan-in)
         # Bias terms intialized to zero.
-        # Weight symbols: ^, ->, -->, ->>, >>>
+        # Weight symbols in visual rep: ^, ->, -->, ->>, >>>
         self.inputs = []
         self.encoder = []
         self.inputImage = []
@@ -52,20 +58,86 @@ class nnet(object):
         self.inputDecoder = []
         self.future = []
         self.inputFuture = []
-        self.weightImage = np.random.uniform(-self.scale,self.scale,self.units,self.inputSize)
-        self.weightEncoder = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
-        self.weightBetween = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
-        self.weightDecoder = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
-        self.weightFuture = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
-        self.biasImage = np.zeros((self.units))
-        self.biasDecoder = np.zeros((self.units))
-        self.biasFuture = np.zeros((self.units))
+        #self.weightImage = np.random.uniform(-self.scale1,self.scale1,self.units,self.inputSize)
+        #self.weightEncoder = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        #self.weightBetween = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        #self.weightDecoder = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        #self.weightFuture = np.random.uniform(-self.scale2,self.scale2,self.units,self.units)
+        #self.biasImage = np.zeros((self.units))
+        #self.biasDecoder = np.zeros((self.units))
+        #self.biasFuture = np.zeros((self.units))
 
         # Create Toy Dataset
-        self.createDataset()
 
-    def createDataset(self):
+        self.trainSetSize = 300
+        self.testSetSize = 300
+
+        if (os.path.isfile('data.p')):
+            dataFile = open('data.p','rb')
+            self.trainSet = pickle.load(dataFile)
+            self.testSet = pickle.load(dataFile)
+        else:
+            self.trainSet = self.createTrainSet()
+            dataFile = open('data.p','w')
+            pickle.dump(self.trainSet,dataFile)
+            self.testSet = self.createTestSet()
+            pickle.dump(self.testSet,dataFile)
+
+    # createTrainSet(self)
+    # -----------------------
+    # A 4x4 black pixel block simulates a 'car' in a white traffic scene. Every 8
+    # pixels is a 'road' that the car can travel horizontally on. Only one car
+    # can occupy a road at a time. Each car moves with a speed of 1, 2, or 4
+    # pixels at a time, chosen with uniform probability. A car enters an empty
+    # row with a probability of 1/8 if there is no car currently there. We use a
+    # large dataset with the variation as described above to allow for training
+    # to happen and to simulate a real world setting.
+ 
+    def createTrainSet(self):
         
+        carColor = .5
+        backgroundColor = 1
+        trainSet = []
+        roads = [0] * 4
+        speed = [0] * 4
+        position = [0] * 4
+        count = 0
+
+        while (count < 10):
+            image = np.ones((np.sqrt(self.inputSize),np.sqrt(self.inputSize))) * backgroundColor
+            for i in range(0,4):
+                if roads[i] == 1:
+                    if position[i] < np.sqrt(self.inputSize) - 4:
+                        row = i*16 + 6
+                        position[i] = position[i] + speed[i]
+                        image[row:row+4,position[i]:position[i]+4] = carColor
+
+                    else:
+                        roads[i] = 0
+                        speed[i] = 0
+                        position[i] = 0
+                else:
+                    if (np.random.uniform(0,1,1) < 0.25):
+                        roads[i] = 1
+                        position[i] = 0
+                        speedRand = np.random.uniform(0,1,1)
+                        if (speedRand < 1.0/3):
+                            speed[i] = 1
+                        elif (speedRand < 2.0/3):
+                            speed[i] = 2
+                        else:
+                            speed[i] = 4
+                        row = i*16 + 6
+                        column = 0
+                        image[row:row+4,column:column+4] = carColor
+            trainSet.append(np.reshape(image,self.inputSize))
+            count += 1
+        return trainSet
+
+    def createTestSet(self):        
+        
+        return []
+
     def act(self,z):
 
         return 1/(1 + np.exp(-1 * z))
@@ -189,7 +261,7 @@ class nnet(object):
 
         # Decoder
         deltasDecoder = [None] * len(imagesDecoder)
-        deltasDecoder[-1] = np.dot((self.decoder[-1] - self.imagesDecoder[-1]),self.der(self.inputDecoder[-1]))]
+        deltasDecoder[-1] = np.dot((self.decoder[-1] - self.imagesDecoder[-1]),self.der(self.inputDecoder[-1]))
 
         for i in range(0,len(imagesDecoder) - 1)[::-1]:
             deltaTimeDecoder = np.dot(self.weightDecoder.T * deltasDecoder[i+1], self.der(self.inputDecoder[i]))
@@ -198,7 +270,7 @@ class nnet(object):
 
         # Future
         deltasFuture = [None] * len(imagesFuture)
-        deltasFuture[-1] = np.dot((self.future[-1] - self.imagesFuture[-1]),self.der(self.inputFuture[-1]))]
+        deltasFuture[-1] = np.dot((self.future[-1] - self.imagesFuture[-1]),self.der(self.inputFuture[-1]))
 
         for i in range(0,len(imagesFuture) - 1)[::-1]:
             deltaTimeFuture = np.dot(self.weightFuture.T * deltasFuture[i+1], self.der(self.inputFuture[i]))
@@ -210,16 +282,16 @@ class nnet(object):
         deltasEncoder[-1] = np.dot(self.weightBetween.T * (deltaDecoder[0] + deltaFuture[0]), self.der(self.inputEncoder[-1]))
                              
         for i in range(0,len(imagesEncoder) - 1)[::-1]:
-            deltasEncoder.append(np.dot(self.weightEncoder.T * deltasEncoder[i+1], self.der(self.inputEncoder[i]))))
+            deltasEncoder.append(np.dot(self.weightEncoder.T * deltasEncoder[i+1], self.der(self.inputEncoder[i])))
 
         # Updates
-        updateW = np.sum(np.dot(deltasDecoder[1::],self.decoder[0:-1])
+        updateW = np.sum(np.dot(deltasDecoder[1::],self.decoder[0:-1]))
         self.weightDecoder = self.weightDecoder - self.learningRate*updateW
 
-        updateW = np.sum(np.dot(deltasFuture[1::],self.future[0:-1])
+        updateW = np.sum(np.dot(deltasFuture[1::],self.future[0:-1]))
         self.weightFuture = self.weightFuture - self.learningRate*updateW
 
-        updateW = np.sum(np.dot(deltasDecoder[0] + deltasFuture[0],self.encoder[-1])
+        updateW = np.sum(np.dot(deltasDecoder[0] + deltasFuture[0],self.encoder[-1]))
         self.weightBetween = self.weightBetween - self.learningRate*updateW
 
         updateB = deltasDecoder[0]
@@ -228,30 +300,51 @@ class nnet(object):
         updateB = deltasFuture[0]
         self.biasFuture = self.biasFuture - self.learningRate*updateB                        
 
-        updateW = np.sum(np.dot(deltasEncoder[1::],self.encoder[0:-1])
+        updateW = np.sum(np.dot(deltasEncoder[1::],self.encoder[0:-1]))
         self.weightEncoder = self.weightEncoder - self.learningRate*updateW
 
-        updateW = np.sum(np.dot(deltasImageEncoder,self.imagesEncoder)
+        updateW = np.sum(np.dot(deltasImageEncoder,self.imagesEncoder))
         self.weightImage = self.weightInput - self.learningRate*updateW
 
         updateB = np.sum(deltasImageEncoder)
         self.biasFuture = self.biasFuture - self.learningRate*updateB                        
 
-    def viewImage(self,i):
-        array = np.reshape(self.images[i],(np.sqrt(self.units),np.sqrt(self.units)))
-        plt.imshow(array,cmap=plt.cm.gray)
+    def reshapeImageWithBorder(self,image):
+
+        dim = np.sqrt(len(image))
+        array = np.reshape(image,(dim,dim))
+        arrayBorder = np.zeros((dim+2,dim+2))
+        arrayBorder[1:1+dim,1:1+dim] = array
+        return arrayBorder
+
+    def viewImage(self,images,i):
+        plt.imshow(self.reshapeImageWithBorder(images[i]),cmap = 'gray')
         plt.show()
 
-    def viewOutput(self,i):
-        array = np.reshape(self.activations[i],(np.sqrt(self.units),np.sqrt(self.units)))
-        plt.imshow(array,cmap=plt.cm.gray)
+    def viewVideo(self,images,maxFrame):
+        
+        fig = plt.figure()
+        video = []
+        for im in images:
+            video.append(self.reshapeImageWithBorder(im))
+
+        vid = ani.FuncAnimation(fig,lambda i: plt.imshow(video[i],cmap='gray'),frames=maxFrame,interval=50,repeat=False)
         plt.show()
+
+    def dumpImages(self,images):
+
+        for i in range(0,len(images)):
+            plt.imshow(self.reshapeImageWithBorder(images[i]))
+            plt.savefig("train_" + str(i) + ".png")
 
     def run(self):
 
-        while(True):
-            self.forwardProp()
-            self.backProp()
+        if (start < len(self.trainSet) - self.encoderLen - self.futureLen):
+            encoderImages = self.trainSet[start,start+self.encoderLen]                 
+            decoderImages = self.trainSet[start,start+self.decoderLen]                 
+            futureImages = self.trainSet[start,start+self.futureLen]                 
+            self.forwardProp(encoderImages, decoderImages, futureImages)
+            self.backProp(encoderImages, decoderImages, futureImages)
             print self.cost()
 
 
