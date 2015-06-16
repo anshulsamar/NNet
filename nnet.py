@@ -64,6 +64,7 @@ class nnet(object):
         # Decoder
         self.decoder = []
         self.inputDecoder = []
+        self.inputDecodedImage = []
         self.decodedImage = []
         self.weightBetween = np.random.uniform(-self.scale2,self.scale2,(self.units,self.units))
         self.weightDecoder = np.random.uniform(-self.scale2,self.scale2,(self.units,self.units))
@@ -74,6 +75,7 @@ class nnet(object):
         # Future
         self.future = []
         self.inputFuture = []
+        self.inputPrecictedImage = []
         self.predictedImage = []
         self.weightFuture = np.random.uniform(-self.scale2,self.scale2,(self.units,self.units))
         self.weightPredictedImage = np.random.uniform(-self.scale2,self.scale2,(self.inputSize,self.units))
@@ -220,11 +222,13 @@ class nnet(object):
         self.inputDecoder = np.zeros((self.units,len(decoderImages)))
         self.inputDecoder[:,[0]] = np.dot(self.weightBetween,self.encoder[:,[-1]]) + self.biasDecoder
         self.decoder = np.zeros((self.units,len(decoderImages)))
+        self.inputDecodedImage = np.zeros((self.inputSize,len(decoderImages)))
         self.decodedImage = np.zeros((self.inputSize,len(decoderImages)))
 
         for i in range(0,len(decoderImages)):
             self.decoder[:,[i]] = self.act(self.inputDecoder[:,[i]])
-            self.decodedImage[:,[i]] = np.dot(self.weightDecodedImage,self.decoder[:,[i]]) + self.biasDecodedImage
+            self.inputDecodedImage[:,[i]] = np.dot(self.weightDecodedImage,self.decoder[:,[i]]) + self.biasDecodedImage
+            self.decodedImage[:,[i]] = self.act(self.decodedImage[:,[i]])
             if (i < len(decoderImages) - 1):
                 self.inputDecoder[:,[i+1]] = np.dot(self.weightDecoder,self.decoder[:,[i]])
 
@@ -232,11 +236,13 @@ class nnet(object):
         self.inputFuture = np.zeros((self.units,len(futureImages)))
         self.inputFuture[:,[0]] = np.dot(self.weightBetween,self.encoder[:,[-1]]) + self.biasFuture
         self.future = np.zeros((self.units,len(futureImages)))
+        self.inputPredictedImage = np.zeros((self.inputSize,len(futureImages)))
         self.predictedImage = np.zeros((self.inputSize,len(futureImages)))
 
         for i in range(0,len(futureImages)):
             self.future[:,[i]] = self.act(self.inputFuture[:,[i]])
-            self.predictedImage[:,[i]] = np.dot(self.weightPredictedImage,self.future[:,[i]]) + self.biasPredictedImage
+            self.inputPredictedImage[:,[i]] = np.dot(self.weightPredictedImage,self.future[:,[i]]) + self.biasPredictedImage
+            self.predictedImage[:,[i]] = self.act(self.inputPredictedImage[:,[i]])
             if (i < len(futureImages) - 1):
                 self.inputFuture[:,[i+1]] = np.dot(self.weightFuture,self.future[:,[i]])
 
@@ -308,29 +314,35 @@ class nnet(object):
     def backProp(self,imagesEncoder,imagesDecoder,imagesFuture):
 
         # Decoder
-        deltasDecoder = [None] * len(imagesDecoder)
-        deltasDecoder[-1] = np.dot((self.decoder[-1] - self.imagesDecoder[-1]),self.der(self.inputDecoder[-1]))
+        deltasDecoder = np.zeros((self.units,len(imagesDecoder)))
+        deltasDecodedImage = np.zeros((self.units, len(imagesDecoder)))
+        deltasDecodedImage[:,[-1]] = np.dot((self.decodedImage[:,[-1]] - self.imagesDecoder[-1]).T,self.der(self.inputDecodedImage[:,[-1]]))
+        deltasDecoder[:,[-1]] = np.dot(np.dot(self.weightDecodedImage.T,deltasDecodedImage[:,[-1]]).T,self.der(self.inputDecoder[:,[-1]))
 
         for i in range(0,len(imagesDecoder) - 1)[::-1]:
-            deltaTimeDecoder = np.dot(np.dot(self.weightDecoder.T,deltasDecoder[i+1]), self.der(self.inputDecoder[i]))
-            deltaImageDecoder = np.dot((self.decoder[i] - self.imagesDecoder[i]),self.der(self.inputDecoder[i]))
-            deltasDecoder[i] = deltaImageDecoder + deltaTimeDecoder
+            deltaTimeDecoder = np.dot(np.dot(self.weightDecoder.T,deltasDecoder[:,[i+1]]).T, self.der(self.inputDecoder[:,[i]]))
+            deltasDecodedImage[:,[i]] = np.dot((self.decodedImage[:,[i]] - self.imagesDecoder[i]),self.der(self.inputDecodedImage[:,[i]]))
+            deltaImageDecoder = np.dot(np.dot(self.weightDecodedImage.T,deltasDecodedImage[:,[i]]).T,self.der(self.inputDecoder[:,[i]]))
+            deltasDecoder[:,[i]] = deltaImageDecoder + deltaTimeDecoder
 
         # Future
-        deltasFuture = [None] * len(imagesFuture)
-        deltasFuture[-1] = np.dot((self.future[-1] - self.imagesFuture[-1]),self.der(self.inputFuture[-1]))
+        deltasFuture = np.zeros((self.units,len(imagesFuture)))
+        deltasPredictedImage = np.zeros((self.units, len(imagesFuture)))
+        deltasPredictedImage[:,[-1]] = np.dot((self.predictedImage[:,[-1]] - self.imagesFuture[-1]).T,self.der(self.inputPredictedImage[:,[-1]]))
+        deltasFuture[:,[-1]] = np.dot(np.dot(self.weightPredictedImage.T,deltasPredictedImage[:,[-1]]).T,self.der(self.inputFuture[:,[-1]))
 
         for i in range(0,len(imagesFuture) - 1)[::-1]:
-            deltaTimeFuture = np.dot(np.dot(self.weightFuture.T,deltasFuture[i+1]), self.der(self.inputFuture[i]))
-            deltaImageFuture = np.dot((self.future[i] - self.imagesFuture[i]),self.der(self.inputFuture[i]))
-            deltasFuture[i] = deltaImageFuture + deltaTimeFuture
+            deltaTimeFuture = np.dot(np.dot(self.weightFuture.T,deltasFuture[:,[i+1]]).T, self.der(self.inputFuture[:,[i]]))
+            deltasPredictedImage[:,[i]] = np.dot((self.predictedImage[:,[i]] - self.imagesFuture[i]),self.der(self.inputPredictedImage[:,[i]]))
+            deltaImageFuture = np.dot(np.dot(self.weightPredictedImage.T,deltasPredictedImage[:,[i]]).T,self.der(self.inputFuture[:,[i]]))
+            deltasFuture[:,[i]] = deltaImageFuture + deltaTimeFuture
 
         # Encoder
-        deltasEncoder = [None] * len(imagesEncoder)
-        deltasEncoder[-1] = np.dot(np.dot(self.weightBetween.T,(deltaDecoder[0] + deltaFuture[0])), self.der(self.inputEncoder[-1]))
+        deltasEncoder = np.zeros((self.units, len(imagesEncoder))
+        deltasEncoder[:,[-1]] = np.dot(np.dot(self.weightBetween.T,(deltaDecoder[:,[0]] + deltaFuture[:,[0]])).T, self.der(self.inputEncoder[:,[-1]]))
                              
         for i in range(0,len(imagesEncoder) - 1)[::-1]:
-            deltasEncoder[i] = np.dot(np.dot(self.weightEncoder.T,deltasEncoder[i+1]), self.der(self.inputEncoder[i]))
+            deltasEncoder[:,[i]] = np.dot(np.dot(self.weightEncoder.T,deltasEncoder[:,[i+1]]).T, self.der(self.inputEncoder[:,[i]]))
 
         # Updates
 
@@ -346,17 +358,29 @@ class nnet(object):
         updateWB = np.sum(np.dot(deltasDecoder[0] + deltasFuture[0],self.encoder[-1]))
         self.weightBetween = self.weightBetween - self.learningRate*updateWB
 
-        updateBD = deltasDecoder[0]
-        self.biasDecoder = self.biasDecoder - self.learningRate*updateBD                        
-        
-        updateBF = deltasFuture[0]
-        self.biasFuture = self.biasFuture - self.learningRate*updateBF
-
         updateWD = np.sum(np.dot(deltasDecoder[1::],self.decoder[0:-1]))
         self.weightDecoder = self.weightDecoder - self.learningRate*updateWD
 
+        updateWDI = np.sum(np.dot(deltasDecodedImage,self.decoder))
+        self.weightDecodedImage = self.weightDecodedImage - self.learningRate*updateWDI
+
+        updateBDI = np.sum(deltasDecodedImage)
+        self.biasDecodedImage = self.biasDecodedImage - self.learningRate*updateBDI
+
+        updateBD = deltasDecoder[0]
+        self.biasDecoder = self.biasDecoder - self.learningRate*updateBD                        
+
         updateWF = np.sum(np.dot(deltasFuture[1::],self.future[0:-1]))
         self.weightFuture = self.weightFuture - self.learningRate*updateWF
+
+        updateWPI = np.sum(np.dot(deltasPredictedImage,self.future))
+        self.weightPredictedImage = self.weightPredictedImage - self.learningRate*updateWPI
+
+        updateBPI = np.sum(deltasPredictedImage)
+        self.biasPredictedImage = self.biasPredictedImage - self.learningRate*updateBPI
+
+        updateBF = deltasFuture[0]
+        self.biasFuture = self.biasFuture - self.learningRate*updateBF
 
         self.updates = [updateWI,updateBI,updateWE,updateWB,updateBD,updateBF,updateWD,updateWF]
 
