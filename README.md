@@ -1,12 +1,13 @@
 Todo:
-- LSTM
-- Bias units
-- Cudamat
-- Input images
-- Weight intialization
+- Get something training
+- Groundtruth side by side to network output
+- Training infrastructure on deeps
+- LSTM vs normal vs relu
+- Learning rate, bias unit, optimization algorithm, momentum
+- Layers, convlutions, network architecture
 - Loss function
-- More layers, convolutions
-- Optimization algorithm
-- Script to run on deeps, log/restart experiments
+- Cudamat and speed
+- Data
+- Weight Intialization
 - Paper reading list
-- reintilize matrixes to zero in forward prop
+- Directory - deep/speech/vision?

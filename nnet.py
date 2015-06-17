@@ -14,7 +14,7 @@ class nnet(object):
         self.units = 512
         self.layers = 1
         self.imSize = 64*64
-        self.learnRate = .5
+        self.alpha = .001
         self.encLen = 10
         self.decLen = 10
         self.futLen = 10
@@ -233,54 +233,54 @@ class nnet(object):
         delTimesWeightDec  = np.dot(self.encDetW.T,delDec[:,[0]])
         delTimesWeightFut = np.dot(self.encFutW.T,delFut[:,[0]]))
         delTimesWeight = delTimesWeightDec + delTimesWeightFut
-        delEnc[:,[-1]] = np.dot(deltaTimesWeight.T, self.der(self.encIn[:,[-1]]))
+        delEnc[:,[-1]] = np.dot(delTimesWeight.T, self.der(self.encIn[:,[-1]]))
                              
         for i in range(0,len(encImTruth) - 1)[::-1]:
             delTimesWeight = np.dot(self.encW.T,delEnc[:,[i+1]])
             delEnc[:,[i]] = np.dot(delTimesWeight.T, self.der(self.encIn[:,[i]]))
-                          
+
         # Encoder Update
         updateWI = np.sum(np.dot(delEnc,self.encImTruth))
-        self.encImW = self.weightInput - self.learnRate*updateWI
+        self.encImW = self.weightInput - self.alpha*updateWI
 
         updateBI = np.sum(delEnc)
 
-        self.encImB = self.biasEncoder - self.learnRate*updateBI
+        self.encImB = self.biasEncoder - self.alpha*updateBI
 
         updateWE = np.sum(np.dot(delEnc[1::],self.encOut[0:-1]))
-        self.encW = self.encW - self.learnRate*updateWE
+        self.encW = self.encW - self.alpha*updateWE
 
         updateWencDec = np.sum(np.dot(delDec[0],self.encOut[-1]))
-        self.encDecW = self.encDecW - self.learnRate*updateWB
+        self.encDecW = self.encDecW - self.alpha*updateWB
 
         updateWencFut = np.sum(np.dot(delFut[0],self.encOut[-1]))
-        self.encFutW = self.encFutW - self.learnRate*updateWB
+        self.encFutW = self.encFutW - self.alpha*updateWB
 
         # Decoder Update
         updateWD = np.sum(np.dot(delDec[1::],self.dec[0:-1]))
-        self.decW = self.decW - self.learnRate*updateWD
+        self.decW = self.decW - self.alpha*updateWD
 
         updateWDI = np.sum(np.dot(delDecIm,self.dec))
-        self.decImW = self.decImW - self.learnRate*updateWDI
+        self.decImW = self.decImW - self.alpha*updateWDI
 
         updateBDI = np.sum(delDecIm)
-        self.decImB = self.decImB - self.learnRate*updateBDI
+        self.decImB = self.decImB - self.alpha*updateBDI
 
         updateBD = delDec[0]
-        self.decB = self.decB - self.learnRate*updateBD                        
+        self.decB = self.decB - self.alpha*updateBD                        
         
         # Future Update
         updateWF = np.sum(np.dot(delFuture[1::],self.futOut[0:-1]))
-        self.futW = self.futW - self.learnRate*updateWF
+        self.futW = self.futW - self.alpha*updateWF
 
         updateWPI = np.sum(np.dot(delFutIm,self.futOut))
-        self.futImW = self.futImW - self.learnRate*updateWPI
+        self.futImW = self.futImW - self.alpha*updateWPI
 
         updateBPI = np.sum(delFutIm)
-        self.futImB = self.futImB - self.learnRate*updateBPI
+        self.futImB = self.futImB - self.alpha*updateBPI
 
         updateBF = delFut[0]
-        self.futB = self.futB - self.learnRate*updateBF
+        self.futB = self.futB - self.alpha*updateBF
 
         self.updates = [updateWI,updateBI,updateWE,updateWencDet,\
                        updateWencFut,updateBD,updateBF,updateWD,updateWF]
