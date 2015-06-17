@@ -13,7 +13,7 @@ This neural network architecture is built upon "Unsupervised Learning of Video R
                        Future:
 
                        --> N >>> N >>> N >>> N
-                          |||   |||   |||   |||
+                           |     |     |     |
                            N'    N'    N'    N'
 
 The encoder is an RNN where each time step accepts a new image input and the decoder and future are RNNs where each time steps output a new image prediction. The output of the decoder is tested against I3, I2, I1, I0 (in this order, left to right above) and the output of future is tested against I4, I5, I6, I7 (in this order, left to right above). We are currently only using sigmoid units. Built on python, numpy, & cudamat.
@@ -37,14 +37,12 @@ Note, 'In' refers to input, 'Im' refers to image, 'enc' refers to encoder, 'dec'
 - _decIn_: input into decoder from previous time step i - 1
 - _decImIn_: input into the 'image' layer (N' in the picture above)
 - _decImOut_: output of the 'image' layer (N' in the picture above). This is tested against groundtruth.
-- _decImW_: weight between decoder and image layer
-- _decImB_: bias between decoder and image layer
 - _futOut_: output of future at time i
 - _futIn_: input into future from previous time step i - 1
 - _futImIn_: input into the 'image' layer (N' in the picture above)
 - _futImOut_: output of the 'image' layer (N' in the picture above). This is tested against groundtruth.
-- _futImW_: weight between future and image layer
-- _futImB_: bias between future and image layer
+- _outImW_: weight between future and image layer
+- _outImB_: bias between future and image layer
 
 ## Implementation Notes
 

@@ -1,4 +1,5 @@
 Todo:
+- does anything fail if column order thigns don't work
 - Get something training
 - Groundtruth side by side to network output
 - Training infrastructure on deeps
