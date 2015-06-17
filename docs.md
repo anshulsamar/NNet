@@ -70,18 +70,18 @@ At each time step (i), the encoder receives self.encIn[:,[i]]. This consists of 
 
 We derive back propogation specific to this model. Please refer to the visual diagram above or look up backpropogation through time to understand the foundation of this derivation. Documentation currently does not include weights/biases of decode/future output or new name convention.
     
-### Decoder and Future:
+##### Decoder and Future:
 
 We use a Euclidian loss function: 1/2 ||y - f||^2, where f is the output of our neuron and y is the groundtruth. Let zi be the input into the decoder at time (i). We first calculate dE/dzi for every unit. Starting at the right of the decoder, we have dE/dz4 = (h - f(z4))*f'(z4). We store this in delDec[:,[3]]. For the next neuron, we have dE/dz3 = d(E' + E'')/dz3, where dE'/dz3 is the error from the immediate groundtruth (I2), calculated just like above. We store this in delFromIm. E'' is the error from the groundtruth (I1) propogated through the weight (->>). Lets call this weight W. We have d(E'')/dz3 = d(E'')/dz4 * dz3/dz3. Note that z4 = W*f(z3). Thus dz4/dz3 = W*f'(z3). Thus d(E'')/dz3 = d(E'')/dz4 * W * f'(z3). The first term has already been computed and stored in deltasDecoder[3]. We calculate d(E'')/dz3  and store it in deFromTime. Our final dE/dz3 is deltaTimeDecoder +  deltaImageDecoder. We store this in deltasDecoder[2]. We will calculate one more for clarity. For the next neuron, we have dE/dz2 = d(E' + E'' + E''')/dz3, where E',E'' are above and E''' is the error from the immediate groundtruth (I3) calculated just like above. We store that in deltaImageDecoder[1]. Note that d(E' + E'')/dz3 = d(E' + E'')/dz2 * dz2/dz3 which is the deltaImageDecoder[2] * W * f'(z2). We store d(E' + E'')/dz3 in deltaTimeDecoder[1]. We add these deltas together to get deltasDecoder[1]. The procedure is exactly the same for the Future module, except we use different images to calculate error (namely, images in the future).    
-### Encoder:
+##### Encoder:
 
 We look at the right most encoder neuron, (i). Using the same reasoning as above we have, dE/dzi = d(E_decoder)/dzi + d(E_future)/dzi = WBetween * (deltaDecoder[0] + deltaFuture[0]) * f'(zi), where E_decoder and E_future are the sum of errors from the image errors of the decoder and future respectively, i.e E_decoder = E' + E'' + .... We store this total delta in deltasEncoder. Note that each neuron receives input from two sources (its previous time and the image). Thus, dE/dzImage = dE/dzi * dzi/dzImage =  dE/dzi * (dzImage + dzTime)/dzImage = dE/dzi = dE/dzTime. Thus, it is sufficient to only calculate one delta for each neuron in the Encoder. 
      
-### Weight Update
+##### Weight Update
 
 Note that for neuron (i) and the weights W entering it, dE/dW = dE/dzi * dzi/dW. Note that zi = W*f(z(i-1)). Thus dzi/dW is the activation of the previous neuron. Thus dE/dW = deltaDecoder[i]*decoder[i-1]. Because our weights are the same, our effective dE/dW = deltaDecoder[1::] * decoder[0:-1]. This also holds for Future. Using the same reasoning, for the weight in between encoder and decoder/future, we have dE/dW =  deltaDecoder[0]*encoder[-1] + deltaFuture[0]*encoder[-1] = (deltaDecoder[0] + deltaFuture[0]) * encoder[-1]. For the encoder weight, we have dE/dW = deltaEncoder[i]*encoder[i-1] and because the encoder weights are the same, our effective dE/dW = deltaEncoder[1::] * encoder[0:-1]. For the input image weight, we have dE/dw = deltaEncoder[i]*imagesEncoder[i]. Thus, because input weights are the same, our effective dE/dW = deltaEncoder*imagesEncoder.
      
-### Optimization
+##### Optimization
    
 Stochastic gradient descent. We multiply derivatives above times a learning rate and subtract it from the current weight. 
 
