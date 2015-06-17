@@ -1,37 +1,52 @@
-This neural network architecture is built upon "Unsupervised Learning of Video Representations using LSTMs" by Srivastava, et al. Let 'N' represent a neuron, 'I' an image, '^','->','->>','>>>','-->','|','||' all represent dif weights and connections ('|' is not a weight). The following is a visual representation of this network for a sequence of three images (without bias terms). The output of each decoder/future neuron is compared against groundtruth. 
+# Documentation
+
+## Overview
+
+This neural network architecture is built upon "Unsupervised Learning of Video Representations using LSTMs" by Srivastava, et al. Let 'N' represent a sigmoid layer/unit, 'I0, I1, ... ' represent images, and '^','->','->>','>>>','-->','|','||' all represent different weights and connections. The following is a visual representation of this network for a sequence of three images without bias terms. The output of each decoder and future unit is compared against groundtruth. 
  
- Encoder:        Decoder:
+Encoder:          Decoder:
 
  N -> N -> N -> N --> N ->> N ->> N ->> N
  ^    ^    ^    ^     |     |     |     |
- I1   I2   I3   I4    I4    I3    I2    I1
+ I0   I1   I2   I3    I3    I2    I1    I0
 
                  Future:
 
                    --> N >>> N >>> N >>> N
                        ||    ||    ||    ||
-                       I5    I6    I7    I8
+                       I4    I5    I6    I7
 
-Check the README for current work list. Built on python, numpy, & cudamat.
+Built on python, numpy, & cudamat.
 
-Network weights, structures, parameters. Weights initialized to 1/sqrt(fan-in) and bias terms initialized to zero. Input size must be square. 
+## Structure Names
 
-     createTrainSet(self)
-     -----------------------
-     A 4x4 black pixel block simulates a 'car' in a white traffic scene. Every 8
-     pixels is a 'road' that the car can travel horizontally on. Only one car
-     can occupy a road at a time. Each car moves with a speed of 1, 2, or 4
-     pixels at a time, chosen with uniform probability. A car enters an empty
-     row with a probability of 1/8 if there is no car currently there. We use a
-     large dataset with the variation as described above to allow for training
-     to happen and to simulate a real world setting.
+encOut[:,[i]]: the output of an encoder layer at time i
+encIn[:,[i]]: the input into an encoder layer at time i
+encInIm[:,[i]]: the input into an encoder layer from the original image (i.e. encImW * image(i) + encImB)
+encInPast[:,[i]]: the input into an encoder layer from the previous time step (i.e. encOut[:,[i-1]])
+encImW: the weight matrix an input image is multiplied by
+encImB: the bias that gets added to the encoder input
+encW: the weight matrix encoder output is multiplied by
+betW: the weight matrix the encoder output is multiplied by before going into the decoder/future
+decB: the bias that gets added to the encoder output before going into the decoder
+futB: the bias that gets added to the encoder output before going into the decoder
 
-     calculateLoss(self,decImages,futImTruth)
-     ----------------
-     Loss with current network. Requires having done one forward prop.
+## Implementation Notes
 
-     forwardProp(self, encoderImages, decoderImages, futureImages)
-     -------------------------------------------------------------
+To make debugging easier, we treat go to extra pains to make every structure in column form, to fit the math. For example, we will write encOut[:,[i]] instead of encOut[:,i] because we want numpy.shape to return a column vector instead of an array. 
+
+We use matplotlib to view videos. This seems to have some lag, but is effective for debugging.
+
+## createTrainSet(self)
+
+A 4x4 black pixel block simulates a 'car' in a white traffic scene. Every 8 pixels is a 'road' that the car can travel horizontally on. Only one car can occupy a road at a time. Each car moves with a speed of 1, 2, or 4 pixels at a time, chosen with uniform probability. A car enters an empty row with a probability of 1/8 if there is no car currently there. We use a large dataset with the variation as described above to allow for training to happen and to simulate a real world setting.
+
+## calculateLoss(self,decImages,futImTruth)
+
+Loss with current network. Requires having done one forward prop.
+
+## forwardProp(self, encoderImages, decoderImages, futureImages)
+
      Each encoder neuron (i) receives self.encIn[i] as input. This
      consists of the output of the previous encoder neuron
      (self.encInPast[i]) and the weighted image
@@ -43,9 +58,7 @@ Network weights, structures, parameters. Weights initialized to 1/sqrt(fan-in) a
      to create a decoded image. Future works similarly. We calculate loss at
      the end
 
-     Function: backProp(self, encoderImages, decoderImagesDecoder,
-     imagesFuture):
-     ------------------------------------------------------
+## backProp(self, encoderImages, decoderImagesDecoder, imagesFuture):
     
      Decoder and Future
      ------------------
@@ -106,8 +119,8 @@ Network weights, structures, parameters. Weights initialized to 1/sqrt(fan-in) a
      Stochastic gradient descent. We multiply derivatives above times a learning rate
      and subtract it from the current weight. 
 
-     Image and Video Processing
-     -----------------------------------
+## Image and Video Processing
+
      reshapeImageWithBorder: reshapes image vector to array and adds a black
      background. Without one black and white pixel, matplotlib doesn't know the
      range of grayscale. 
@@ -116,8 +129,8 @@ Network weights, structures, parameters. Weights initialized to 1/sqrt(fan-in) a
      dumpImages: saves images as PNGs
 
 
-     run(self)
-     ------------------------------------
+##  run(self)
+  
      Runs forward, backprop and training of network. Encodes self.encLen
      images, decodes self.decodeLen images, and predicts self.futLen images
      of the future. Currently does one pass through trainSet. 
