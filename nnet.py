@@ -6,6 +6,10 @@ import os
 import pickle
 import pdb
 
+# change number of units
+# change training set size
+# change enc len dec len and the debug train set splicing
+
 class nnet(object):
 
     def __init__(self):
@@ -14,10 +18,11 @@ class nnet(object):
         self.units = 512
         self.layers = 1
         self.imSize = 64*64
-        self.alpha = .001
-        self.encLen = 10
-        self.decLen = 10
-        self.futLen = 10
+        self.alpha = 1e-3
+        self.encLen = 5
+        self.decLen = 5
+        self.futLen = 5
+        self.trainLen = 10
         self.epochs = 1
         scale1 = 1/np.sqrt(self.imSize)
         scale2 = 1/np.sqrt(self.units)
@@ -43,8 +48,6 @@ class nnet(object):
         self.decImIn = []
         self.decImOut = []
         self.decW = np.random.uniform(-scale2,scale2,(self.units,self.units))
-        self.decImW = np.random.uniform(-scale2,scale2,(self.imSize,self.units))
-        self.decImB = np.zeros((self.imSize,1))
 
         # Future
         self.futOut = []
@@ -52,10 +55,12 @@ class nnet(object):
         self.futImIn = []
         self.futImOut = []
         self.futW = np.random.uniform(-scale2,scale2,(self.units,self.units))
-        self.futImW = np.random.uniform(-scale2,scale2,(self.imSize,self.units))
-        self.futImB = np.zeros((self.imSize,1))
 
-        # Other
+        # Output image
+        self.outImW = np.random.uniform(-scale2,scale2,(self.imSize,self.units))
+        self.outImB = np.zeros((self.imSize,1))
+
+        # Update and Loss
         self.updates = []
         self.loss = []
         
@@ -78,7 +83,7 @@ class nnet(object):
         
         carColor = .5
         backgroundColor = 1
-        trainSet = []
+        trainSet = np.zeros((self.imSize,0))
         roads = [0] * 4
         speed = [0] * 4
         position = [0] * 4
@@ -86,7 +91,7 @@ class nnet(object):
 
         while (count < 10):
             dim = np.sqrt(self.imSize)
-            image = np.ones(dim,dim) * backgroundColor
+            image = np.ones((dim,dim)) * backgroundColor
             for i in range(0,4):
                 if roads[i] == 1:
                     if position[i] < np.sqrt(self.imSize) - 4:
@@ -112,7 +117,7 @@ class nnet(object):
                         row = i*16 + 6
                         column = 0
                         image[row:row+4,column:column+4] = carColor
-            trainSet.append(np.reshape(image,(self.imSize,1)))
+            trainSet = np.hstack((trainSet,np.reshape(image,(self.imSize,1))))
             count += 1
         return trainSet
 
@@ -128,66 +133,68 @@ class nnet(object):
 
         return self.act(z) * (1 - self.act(z))
 
-    def calculateLoss(self,decImages,futImTruth):
+    def calculateLoss(self,decImTruth,futImTruth):
 
         decTotal = 0.0
         decNorm = 0.0
-        for i in range(0,len(decoderImages)):
-            norm = np.linalg.norm(decImages[i] - self.decImOut[i])
+        for i in range(0,self.decLen):
+            norm = np.linalg.norm(decImTruth[:,[i]] - self.decImOut[:,[i]])
             decTotal = decTotal + 1.0/2 * np.square(norm)
-            decNorm = decNorm + np.sum(decImages[i])
+            decNorm = decNorm + np.sum(decImTruth[:,[i]])
 
         futTotal = 0.0
         futNorm = 0.0
-        for i in range(0,len(decoderImages)):
-            norm = np.linalg.norm(futImTruth[i] - self.futImOut[i])
+        for i in range(0,self.futLen):
+            norm = np.linalg.norm(futImTruth[:,[i]] - self.futImOut[:,[i]])
             futTotal = futTotal + 1.0/2 * np.square(norm)
-            futNorm = futNorm + np.sum(futImTruth[i])
+            futNorm = futNorm + np.sum(futImTruth[:,[i]])
 
         self.loss = [decTotal,decTotal/decNorm,futTotal,futTotal/futNorm]
 
     def forwardProp(self,encImTruth,decImTruth,futImTruth):
 
         # Encoder    
-        self.encOut = np.zeros((self.units,len(encImTruth)))
-        self.encInIm = np.zeros((self.units,len(encImTruth)))
-        self.encInPast = np.zeros((self.units,len(encImTruth)))
-        self.encIn = np.zeros((self.units,len(encImTruth)))
+        self.encOut = np.zeros((self.units,self.encLen))
+        self.encInIm = np.zeros((self.units,self.encLen))
+        self.encInPast = np.zeros((self.units,self.encLen))
+        self.encIn = np.zeros((self.units,self.encLen))
 
-        for i in range(0,len(encoderImages)):
-            self.encInIm[:,[i]] = np.dot(self.encImW,encImTruth[i]) + self.encImB
+
+        for i in range(0,self.encLen):
+            self.encInIm[:,[i]] = np.dot(self.encImW,encImTruth[:,[i]]) \
+                                  + self.encImB
             self.encInPast[:,[i]] = np.dot(self.encW,self.encOut[:,[i-1]])
             self.encIn[:,[i]] = self.encInIm[:,[i]] + self.encInPast[:,[i]]
             self.encOut[:,[i]] = self.act(self.encIn[:,[i]])
 
         # Decoder
-        self.decIn = np.zeros((self.units,len(decImTruth)))
+        self.decIn = np.zeros((self.units,self.decLen))
         self.decIn[:,[0]] = np.dot(self.encDecW,self.encOut[:,[-1]]) + self.decB
-        self.dec = np.zeros((self.units,len(decImTruth)))
-        self.decImIn = np.zeros((self.imSize,len(decImTruth)))
-        self.decImOut = np.zeros((self.imSize,len(decImTruth)))
+        self.decOut = np.zeros((self.units,self.decLen))
+        self.decImIn = np.zeros((self.imSize,self.decLen))
+        self.decImOut = np.zeros((self.imSize,self.decLen))
 
-        for i in range(0,len(decImTruth)):
+        for i in range(0,self.decLen):
             self.decOut[:,[i]] = self.act(self.decIn[:,[i]])
-            weightedImage = np.dot(self.decImW,self.decOut[:,[i]])
-            self.decImIn[:,[i]] =  weightedImage + self.decImB
+            weightedImage = np.dot(self.outImW,self.decOut[:,[i]])
+            self.decImIn[:,[i]] =  weightedImage + self.outImB
             self.decImOut[:,[i]] = self.act(self.decImOut[:,[i]])
-            if (i < len(decImTruth) - 1):
+            if (i < self.decLen - 1):
                 self.decIn[:,[i+1]] = np.dot(self.decW,self.decOut[:,[i]])
 
         # Future
-        self.futIn = np.zeros((self.units,len(futImTruth)))
+        self.futIn = np.zeros((self.units,self.futLen))
         self.futIn[:,[0]] = np.dot(self.encFutW,self.encOut[:,[-1]]) + self.futB
-        self.futOut = np.zeros((self.units,len(futImTruth)))
-        self.futImIn = np.zeros((self.imSize,len(futImTruth)))
-        self.futImOut = np.zeros((self.imSize,len(futImTruth)))
+        self.futOut = np.zeros((self.units,self.futLen))
+        self.futImIn = np.zeros((self.imSize,self.futLen))
+        self.futImOut = np.zeros((self.imSize,self.futLen))
 
-        for i in range(0,len(futImTruth)):
+        for i in range(0,self.futLen):
             self.futOut[:,[i]] = self.act(self.futIn[:,[i]])
-            weightedImage = np.dot(self.futImW,self.futOut[:,[i]])
-            self.futImIn[:,[i]] = weightedImage + self.futImB
+            weightedImage = np.dot(self.outImW,self.futOut[:,[i]])
+            self.futImIn[:,[i]] = weightedImage + self.outImB
             self.futImOut[:,[i]] = self.act(self.futImIn[:,[i]])
-            if (i < len(futImTruth) - 1):
+            if (i < self.futLen - 1):
                 self.futIn[:,[i+1]] = np.dot(self.futW,self.futOut[:,[i]])
 
         self.calculateLoss(decImTruth,futImTruth)
@@ -195,95 +202,100 @@ class nnet(object):
     def backProp(self,encImTruth,decImTruth,futImTruth):
 
         # Decoder
-        delDec = np.zeros((self.units,len(decImTruth)))
-        delDecIm = np.zeros((self.units, len(decImTruth)))
-        diff = self.decImOut[:,[-1]] - self.decImTruth[-1]
+        delDec = np.zeros((self.units,self.decLen))
+        delDecIm = np.zeros((self.imSize, self.decLen))
+        diff = self.decImOut[:,[-1]] - decImTruth[:,[-1]]
         delDecIm[:,[-1]] = np.dot(diff.T,self.der(self.decImIn[:,[-1]]))
-        delDec[:,[-1]] = np.dot(np.dot(self.decImW.T,delDecIm[:,[-1]]).T,\
-                               self.der(self.decIn[:,[-1])))
+        delDec[:,[-1]] = np.dot(np.dot(self.outImW.T,delDecIm[:,[-1]]).T,\
+                               self.der(self.decIn[:,[-1]]))
 
-        for i in range(0,len(decImTruth) - 1)[::-1]:
-            diff = self.decImOut[:,[i]] - self.decImTruth[i]
+        for i in range(0,self.decLen - 1)[::-1]:
+            diff = self.decImOut[:,[i]] - decImTruth[:,[i]]
             delDecIm[:,[i]] = np.dot(diff.T,self.der(self.decImIn[:,[i]]))
-            delFromIm = np.dot(np.dot(self.decImW.T,delDecIm[:,[i]]).T,\
+            delFromIm = np.dot(np.dot(self.outImW.T,delDecIm[:,[i]]).T,\
                                self.der(self.decIn[:,[i]]))
             delFromTime = np.dot(np.dot(self.decW.T,delDec[:,[i+1]]).T,\
                                  self.der(self.decIn[:,[i]]))
             delDec[:,[i]] = delFromTime + delFromIm
 
         # Future
-        delFut = np.zeros((self.units,len(futImTruth)))
-        delFutIm = np.zeros((self.units, len(futImTruth)))
-        diff = self.futImOut[:,[-1]] - self.futImTruth[-1]
+        delFut = np.zeros((self.units,self.futLen))
+        delFutIm = np.zeros((self.imSize, self.futLen))
+        diff = self.futImOut[:,[-1]] - futImTruth[:,[-1]]
         delFutIm[:,[-1]] = np.dot(diff.T,self.der(self.futImIn[:,[-1]]))
-        delTimesWeight = np.dot(self.futImW.T,delFutIm[:,[-1]])
-        delFut[:,[-1]] = np.dot(delTimesWeight.T,self.der(self.futIn[:,[-1])))
+        delFut[:,[-1]] = np.dot(np.dot(self.outImW.T,delFutIm[:,[-1]]).T,\
+                                self.der(self.futIn[:,[-1]]))
 
-        for i in range(0,len(futImTruth) - 1)[::-1]:
-            delTimesWeight = np.dot(self.futW.T,delFut[:,[i+1]])
-            delFromTime = np.dot(delTimesWeight.T, self.der(self.futIn[:,[i]]))
-            diff = self.futImOut[:,[i]] - self.futImTruth[i]
-            delFutIm[:,[i]] = np.dot(diff.T,self.der(self.futImIn[:,[i]]))
-            delTimesWeight = np.dot(self.decImW.T,delFutIm[:,[i]])
-            delFutIm = np.dot(delTimesWeight.T,self.der(self.futIn[:,[i]]))
+
+        for i in range(0,self.futLen - 1)[::-1]:
+            diff = self.futImOut[:,[i]] - futImTruth[:,[i]]
+            delFutIm[:,[i]] = np.dot(diff.T,self.der(self.decImIn[:,[i]]))
+            delFromIm = np.dot(np.dot(self.outImW.T,delFutIm[:,[i]]).T,\
+                               self.der(self.futIn[:,[i]]))
+            delFromTime = np.dot(np.dot(self.futW.T,delFut[:,[i+1]]).T,\
+                                 self.der(self.futIn[:,[i]]))
             delFut[:,[i]] = delFromTime + delFromIm
 
         # Encoder
-        delEnc = np.zeros((self.units, len(encImTruth)))
-        delTimesWeightDec  = np.dot(self.encDetW.T,delDec[:,[0]])
-        delTimesWeightFut = np.dot(self.encFutW.T,delFut[:,[0]]))
-        delTimesWeight = delTimesWeightDec + delTimesWeightFut
-        delEnc[:,[-1]] = np.dot(delTimesWeight.T, self.der(self.encIn[:,[-1]]))
+        delEnc = np.zeros((self.units, self.encLen))
+        delEnc[:,[-1]] = np.dot((np.dot(self.encDecW.T,delDec[:,[0]]) + \
+                                np.dot(self.encFutW.T,delFut[:,[0]])).T,\
+                                self.der(self.encIn[:,[-1]]))
                              
-        for i in range(0,len(encImTruth) - 1)[::-1]:
-            delTimesWeight = np.dot(self.encW.T,delEnc[:,[i+1]])
-            delEnc[:,[i]] = np.dot(delTimesWeight.T, self.der(self.encIn[:,[i]]))
-
+        for i in range(0,self.encLen - 1)[::-1]:
+            delEnc[:,[i]] = np.dot(np.dot(self.encW.T,delEnc[:,[i+1]]).T,\
+                                   self.der(self.encIn[:,[i]]))
+        
+        
         # Encoder Update
-        updateWI = np.sum(np.dot(delEnc,self.encImTruth))
-        self.encImW = self.weightInput - self.alpha*updateWI
+        updateEncImW = np.dot(delEnc,encImTruth.T)
+        self.encImW = self.encImW - self.alpha*updateEncImW
 
-        updateBI = np.sum(delEnc)
+        updateEncImB = np.sum(delEnc,1)
+        self.encImB = self.encImB - self.alpha*updateEncImB
 
-        self.encImB = self.biasEncoder - self.alpha*updateBI
+        updateEncW = np.dot(delEnc[:,1::],self.encOut[:,0:-1].T)
+        self.encW = self.encW - self.alpha*updateEncW
 
-        updateWE = np.sum(np.dot(delEnc[1::],self.encOut[0:-1]))
-        self.encW = self.encW - self.alpha*updateWE
+        updateEncDecW = np.dot(delDec[:,[0]],self.encOut[:,[-1]].T)
+        self.encDecW = self.encDecW - self.alpha*updateEncDecW
 
-        updateWencDec = np.sum(np.dot(delDec[0],self.encOut[-1]))
-        self.encDecW = self.encDecW - self.alpha*updateWB
+        updateEncFutW = np.dot(delFut[:,[0]],self.encOut[:,[-1]].T)
+        self.encFutW = self.encFutW - self.alpha*updateEncFutW
 
-        updateWencFut = np.sum(np.dot(delFut[0],self.encOut[-1]))
-        self.encFutW = self.encFutW - self.alpha*updateWB
-
+        self.encoderUpdates = [updateEncImW,updateEncImB, updateEncW, \
+                               updateEncDecW, updateEncFutW]
+        
         # Decoder Update
-        updateWD = np.sum(np.dot(delDec[1::],self.dec[0:-1]))
-        self.decW = self.decW - self.alpha*updateWD
+        updateDecW = np.dot(delDec[:,1::],self.decOut[:,0:-1].T)
+        self.decW = self.decW - self.alpha*updateDecW
 
-        updateWDI = np.sum(np.dot(delDecIm,self.dec))
-        self.decImW = self.decImW - self.alpha*updateWDI
+        updateDecB = delDec[:,[0]]
+        self.decB = self.decB - self.alpha*updateDecB
 
-        updateBDI = np.sum(delDecIm)
-        self.decImB = self.decImB - self.alpha*updateBDI
-
-        updateBD = delDec[0]
-        self.decB = self.decB - self.alpha*updateBD                        
+        self.decoderUpdates = [updateDecW, updateDecB]
         
         # Future Update
-        updateWF = np.sum(np.dot(delFuture[1::],self.futOut[0:-1]))
-        self.futW = self.futW - self.alpha*updateWF
+        updateFutW = np.dot(delFut[:,1::],self.futOut[:,0:-1].T)
+        self.futW = self.futW - self.alpha*updateFutW
 
-        updateWPI = np.sum(np.dot(delFutIm,self.futOut))
-        self.futImW = self.futImW - self.alpha*updateWPI
+        updateFutB = delFut[:,[0]]
+        self.futB = self.futB - self.alpha*updateFutB
 
-        updateBPI = np.sum(delFutIm)
-        self.futImB = self.futImB - self.alpha*updateBPI
+        self.futureUpdates = [updateFutW, updateFutB]
 
-        updateBF = delFut[0]
-        self.futB = self.futB - self.alpha*updateBF
+        # Image Out Update
+        updateOutImW = np.dot(delDecIm,self.decOut.T) \
+                     + np.dot(delFutIm,self.futOut.T)
+        self.outImW = self.outImW - self.alpha*updateOutImW
 
-        self.updates = [updateWI,updateBI,updateWE,updateWencDet,\
-                       updateWencFut,updateBD,updateBF,updateWD,updateWF]
+        updateOutImB = np.sum(delDecIm,1) + np.sum(delFutIm,1)
+        self.outImB = self.outImB - self.alpha*updateOutImB
+
+        self.outImageUpdates = [updateOutImW, updateOutImB]
+
+        self.updates = [self.encoderUpdates, self.decoderUpdates,\
+                        self.futureUpdates, self.outImageUpdates]
 
     def reshapeImageWithBorder(self,image):
 
@@ -319,23 +331,15 @@ class nnet(object):
         for e in range(0,self.epochs):
             iteration = 0
             start = 0
-            while (start < len(self.trainSet) - self.encLen - self.futLen):
-                encoderImages = self.trainSet[start,start+self.encLen]
-                decoderImages = encoderImages[::-1]
-                futureImages = self.trainSet[start+self.encLen,\
-                               start+self.encLen+self.futLen]                 
-                self.forwardProp(encoderImages, decoderImages, futureImages)
+            while (start <= self.trainLen - self.encLen - self.futLen):
+                encImTruth = self.trainSet[:,start:start+self.encLen]
+                decImTruth = encImTruth[:,::-1]
+                futImTruth = self.trainSet[:,\
+                               start+self.encLen:start+self.encLen+self.futLen]
+                self.forwardProp(encImTruth, decImTruth, futImTruth)
                 print "Epoch: %02d, Iter: %04d" % (e, iteration)
-                self.backProp(encoderImages, decoderImages, futureImages)
+                self.backProp(encImTruth, decImTruth, futImTruth)
                 start = start + self.encLen
                 iteration = iteration + 1
-
-
-# , Dec: %06d, DecN: %d, Fut: %06d, FutN: %d, updateWI: %d, updateBI: %d, 
-# updateWE: %d, updateWencDet: %d, updateWencFut %d, updateBD: %d, updateBF: %d
-# , updateWD: %d, updateWF: %d" % (e, iteration, self.loss[0], self.loss[1], 
-# self.loss[2], self.loss[3], self.update[0], self.update[1], self.update[2], 
-# self.update[3], self.update[4], self.update[5], self.update[6], 
-# self.update[7],self.update[8])
 
         
