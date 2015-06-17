@@ -4,25 +4,27 @@
 
 This neural network architecture is built upon "Unsupervised Learning of Video Representations using LSTMs" by Srivastava, et al. Let 'N' represent a sigmoid layer/unit, 'I0, I1, ... ' represent images, and '^','->','->>','>>>','-->','|','||' all represent different weights and connections. The following is a visual representation of this network for a sequence of three images without bias terms. The output of each decoder and future unit is compared against groundtruth. 
  
-Encoder:          Decoder:
+     Encoder:          Decoder:
 
- N -> N -> N -> N --> N ->> N ->> N ->> N
- ^    ^    ^    ^     |     |     |     |
- I0   I1   I2   I3    I3    I2    I1    I0
+      N -> N -> N -> N --> N ->> N ->> N ->> N
+      ^    ^    ^    ^     |     |     |     |
+      I0   I1   I2   I3    I3    I2    I1    I0
 
-                 Future:
+                       Future:
 
-                   --> N >>> N >>> N >>> N
-                       ||    ||    ||    ||
-                       I4    I5    I6    I7
+                       --> N >>> N >>> N >>> N
+                           ||    ||    ||    ||
+                           I4    I5    I6    I7
 
 Built on python, numpy, & cudamat.
 
 ## Structure Names
 
-encOut[:,[i]]: the output of an encoder layer at time i
-encIn[:,[i]]: the input into an encoder layer at time i
-encInIm[:,[i]]: the input into an encoder layer from the original image (i.e. encImW * image(i) + encImB)
+Note, 'In' refers to input, 'Im' refers to image, 'enc' refers to encoder, 'dec' refers to decoder, 'fut' refers to future, 'W' refers to weight, and 'B' refers to bias. 
+
+- *encOut[:,[i]]*: the output of an encoder layer at time i
+- *encIn[:,[i]]*: the input into an encoder layer at time i
+- encInIm[:,[i]]: the input into an encoder layer from the original image (i.e. encImW * image(i) + encImB)
 encInPast[:,[i]]: the input into an encoder layer from the previous time step (i.e. encOut[:,[i-1]])
 encImW: the weight matrix an input image is multiplied by
 encImB: the bias that gets added to the encoder input
@@ -37,9 +39,9 @@ To make debugging easier, we treat go to extra pains to make every structure in 
 
 We use matplotlib to view videos. This seems to have some lag, but is effective for debugging.
 
-## createTrainSet(self)
+## Training Set
 
-A 4x4 black pixel block simulates a 'car' in a white traffic scene. Every 8 pixels is a 'road' that the car can travel horizontally on. Only one car can occupy a road at a time. Each car moves with a speed of 1, 2, or 4 pixels at a time, chosen with uniform probability. A car enters an empty row with a probability of 1/8 if there is no car currently there. We use a large dataset with the variation as described above to allow for training to happen and to simulate a real world setting.
+createTrainingSet(self) creates a toy dataset for us to train with. A 4x4 black pixel block simulates a 'car' in a white traffic scene. Every 16 pixels is a 'road' that the car can travel horizontally on. Only one car can occupy a road at a time. Each car moves with a speed of 1, 2, or 4 pixels at a time, chosen with uniform probability. A car enters an empty row with a probability of 1/4 if there is no car currently there. We use a large dataset with the variation as described above to allow for training to happen and to simulate a real world setting.
 
 ## calculateLoss(self,decImages,futImTruth)
 
