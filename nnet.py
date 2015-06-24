@@ -2,16 +2,16 @@ import numpy as np
 import os
 import pickle
 import pdb
-
-# change number of units
-# change training set size
-# change enc len dec len and the debug train set splicing
+import dataLoader as dl
+import view as view
 
 class nnet(object):
 
     def __init__(self):
 
         # Network parameters
+        self.arr = [1,2,3]
+        self.arr2 = [4,5,6]
         self.units = 512
         self.layers = 1
         self.imSize = 64*64
@@ -35,8 +35,8 @@ class nnet(object):
 
         # From Encoder -> Decoder/Future
         self.encDecW = np.random.uniform(-scale2,scale2,(self.units,self.units))
-        self.encFutW = np.random.uniform(-scale2,scale2,(self.units,self.units))
         self.decB = np.zeros((self.units,1))
+        self.encFutW = np.random.uniform(-scale2,scale2,(self.units,self.units))
         self.futB = np.zeros((self.units,1))
 
         # Decoder
@@ -57,6 +57,11 @@ class nnet(object):
         self.outImW = np.random.uniform(-scale2,scale2,(self.imSize,self.units))
         self.outImB = np.zeros((self.imSize,1))
 
+
+        self.W = [(self.encImW,self.units,self.imSize)]
+
+        #Accessing array
+        #self.W = 
         # Update and Loss
         self.updateEncImW = None
         self.updateEncImB = None
@@ -164,13 +169,16 @@ class nnet(object):
         delDecIm = np.zeros((self.imSize, self.decLen))
         diff = self.decImOut[:,[-1]] - decImTruth[:,[-1]]
         delDecIm[:,[-1]] = diff * self.der(self.decImIn[:,[-1]])
-        delDec[:,[-1]] = np.dot(self.outImW.T,delDecIm[:,[-1]]) * self.der(self.decIn[:,[-1]])
+        delDec[:,[-1]] = np.dot(self.outImW.T,delDecIm[:,[-1]]) * \
+                         self.der(self.decIn[:,[-1]])
 
         for i in range(0,self.decLen - 1)[::-1]:
             diff = self.decImOut[:,[i]] - decImTruth[:,[i]]
             delDecIm[:,[i]] = diff * self.der(self.decImIn[:,[i]])
-            delFromIm = np.dot(self.outImW.T,delDecIm[:,[i]]) * self.der(self.decIn[:,[i]])
-            delFromTime = np.dot(self.decW.T,delDec[:,[i+1]]) * self.der(self.decIn[:,[i]])
+            delFromIm = np.dot(self.outImW.T,delDecIm[:,[i]]) * \
+                        self.der(self.decIn[:,[i]])
+            delFromTime = np.dot(self.decW.T,delDec[:,[i+1]]) * \
+                          self.der(self.decIn[:,[i]])
             delDec[:,[i]] = delFromTime + delFromIm
 
         # Future
@@ -178,14 +186,17 @@ class nnet(object):
         delFutIm = np.zeros((self.imSize, self.futLen))
         diff = self.futImOut[:,[-1]] - futImTruth[:,[-1]]
         delFutIm[:,[-1]] = diff * self.der(self.futImIn[:,[-1]])
-        delFut[:,[-1]] = np.dot(self.outImW.T,delFutIm[:,[-1]]) * self.der(self.futIn[:,[-1]])
+        delFut[:,[-1]] = np.dot(self.outImW.T,delFutIm[:,[-1]]) * \
+                         self.der(self.futIn[:,[-1]])
 
 
         for i in range(0,self.futLen - 1)[::-1]:
             diff = self.futImOut[:,[i]] - futImTruth[:,[i]]
             delFutIm[:,[i]] = diff * self.der(self.decImIn[:,[i]])
-            delFromIm = np.dot(self.outImW.T,delFutIm[:,[i]]) * self.der(self.futIn[:,[i]])
-            delFromTime = np.dot(self.futW.T,delFut[:,[i+1]]) * self.der(self.futIn[:,[i]])
+            delFromIm = np.dot(self.outImW.T,delFutIm[:,[i]]) * \
+                        self.der(self.futIn[:,[i]])
+            delFromTime = np.dot(self.futW.T,delFut[:,[i+1]]) * \
+                          self.der(self.futIn[:,[i]])
             delFut[:,[i]] = delFromTime + delFromIm
 
         # Encoder
@@ -195,7 +206,8 @@ class nnet(object):
                               self.der(self.encIn[:,[-1]])
                              
         for i in range(0,self.encLen - 1)[::-1]:
-            delEnc[:,[i]] = np.dot(self.encW.T,delEnc[:,[i+1]]) * self.der(self.encIn[:,[i]])
+            delEnc[:,[i]] = np.dot(self.encW.T,delEnc[:,[i+1]]) * \
+                            self.der(self.encIn[:,[i]])
     
         # Encoder Update
         self.updateEncImW = np.dot(delEnc,encImTruth.T)
@@ -233,52 +245,99 @@ class nnet(object):
         self.outImW = self.outImW - self.alpha*self.updateOutImW
 
         self.updateOutImB = np.reshape(np.sum(delDecIm,1) + np.sum(delFutIm,1),\
-                                  (self.imSize,1))
+                                       (self.imSize,1))
         self.outImB = self.outImB - self.alpha*self.updateOutImB
+
+        self.update = [self.updateEncImW,self.updateEncImB, self.updateEncW,\
+                       self.updateEncDecW,self.updateDecB,\
+                       self.updateEncFutW,self.updateFutB,\
+                       self.updateDecW,self.updateFutW,\
+                       self.updateOutImW,self.updateOutImB]
 
     def gradCheck(self):
 
-        start = 0
-        iteration = 0
-        self.trainSet = self.loadTrainingSet(0)
+        #One epoch
+        #self.train()
+        
+        #Data
+        start = np.random.randint(0,self.imPerFile - self.encLen)
+        f = np.random.randint(0,self.numDataFiles)
+        self.trainSet = dl.loadTrainingSet(self,f)
         encImTruth = self.trainSet[:,start:start+self.encLen]
         decImTruth = encImTruth[:,::-1]
         futImTruth = self.trainSet[:,\
             start+self.encLen:start+self.encLen+self.futLen]
 
-        randRow = np.random.randint(0,self.units)
-        randCol = np.random.randint(0,self.imSize)
-        epsilonMatrix = np.zeros((self.units,self.imSize))
-        epsilonMatrix[randRow,randCol] = self.epsilon
-        
-        savedW = self.encImW
-        self.encImW = self.encImW + epsilonMatrix
-        self.forwardProp(encImTruth,decImTruth,futImTruth,0,write=False)
-        costPlus = self.cost(decImTruth,self.decImOut) + self.cost(futImTruth,self.futImOut)
-        
-        self.encImW = savedW
-        self.encImW = self.encImW - epsilonMatrix
-        self.forwardProp(encImTruth,decImTruth,futImTruth,0,write=False)
-        costMinus = self.cost(decImTruth,self.decImOut) + self.cost(futImTruth,self.futImOut)
-        grad = (costPlus - costMinus)/(2*self.epsilon)
-        self.encImW = savedW
+        for checks in range(0,5):
 
-        self.forwardProp(encImTruth, decImTruth, futImTruth,0,write=False)
-        self.backProp(encImTruth, decImTruth, futImTruth)
-        cost = self.cost(decImTruth,self.decImOut) + self.cost(futImTruth,self.futImOut)
-        diff = np.absolute(grad - self.updateEncImW[randRow,randCol])
-        weightedDiff = diff/(np.absolute(grad) + np.absolute(self.updateEncImW[randRow,randCol]))
-        print "Numerical: %2.6f Backprop: %2.6f Diff: %2.8f WeightedDiff: %2.8f" % (grad,self.updateEncImW[randRow,randCol],diff,weightedDiff)
-        start = start + self.encLen
-        iteration = iteration + 1
+            print "Check: #" + str(checks)
+            print "-" * 50
+            randRow = []
+            randCol = []
+            costPlus = []
+            costMinus = []
+            grad = []
 
-    def run(self):
+            for (W,numRows,numCols) in \
+                  [(self.encImW,self.units,self.imSize),\
+                  (self.encImB,self.units,1),\
+                  (self.encW,self.units,self.units),\
+                  (self.encDecW,self.units,self.units),\
+                  (self.decB,self.units,1),\
+                  (self.encFutW,self.units,self.units),\
+                  (self.futB,self.units,1),\
+                  (self.decW,self.units,self.units),\
+                  (self.futW,self.units,self.units),\
+                  (self.outImW,self.imSize,self.units),\
+                  (self.outImB,self.imSize,1)]:
+
+
+                #Epsilon Matrix
+                randRow.append(np.random.randint(0,numRows))
+                randCol.append(np.random.randint(0,numCols))
+        
+                #Numerical grad calculation
+                savedValue = W[randRow[-1],randCol[-1]]
+                W[randRow[-1],randCol[-1]] += self.epsilon
+                self.forwardProp(encImTruth,decImTruth,futImTruth,f,write=False)
+                costPlus.append(self.cost(decImTruth,self.decImOut) +\
+                       self.cost(futImTruth,self.futImOut))
+                W[randRow[-1],randCol[-1]] = savedValue
+
+                W[randRow[-1],randCol[-1]] -= self.epsilon
+                self.forwardProp(encImTruth,decImTruth,futImTruth,f,write=False)
+                costMinus.append(self.cost(decImTruth,self.decImOut) +\
+                        self.cost(futImTruth,self.futImOut))
+                grad.append((costPlus[-1] - costMinus[-1])/(2*self.epsilon))
+                W[randRow[-1],randCol[-1]] = savedValue
+
+            #Backprop Grad Calculation
+            self.forwardProp(encImTruth,decImTruth,futImTruth,0,write=False)
+            self.backProp(encImTruth, decImTruth, futImTruth)
+            cost = self.cost(decImTruth,self.decImOut) +\
+                   self.cost(futImTruth,self.futImOut)
+
+            for i in range(0,len(randRow)):
+                
+                backPropGrad = self.update[i][randRow[i],randCol[i]]
+                diff = np.absolute(grad[i] - backPropGrad)
+                sumGrad = np.absolute(grad[i]) + np.absolute(backPropGrad)
+                weightedDiff = diff/sumGrad
+
+                if (weightedDiff > 1e-6):
+                    print "\033[1;31mNum: %2.6f BP: %2.6f Diff: %.2e WDiff: %.2e\033[0m" % \
+                  (grad[i],backPropGrad,diff,weightedDiff)
+                else:
+                    print "Num: %2.6f BP: %2.6f Diff: %.2e WDiff: %.2e" % \
+                  (grad[i],backPropGrad,diff,weightedDiff)
+
+    def train(self):
 
         for f in range(0,self.numDataFiles):
 
             iteration = 0
             start = 0
-            self.trainSet = self.loadTrainingSet(f)
+            self.trainSet = dl.loadTrainingSet(self,f)
             self.decFileHand = open(self.decOutFile[:-2] + str(f) + '.p','w')
             self.futFileHand = open(self.futOutFile[:-2] + str(f) + '.p','w')
 
@@ -286,8 +345,10 @@ class nnet(object):
 
                 encImTruth = self.trainSet[:,start:start+self.encLen]
                 decImTruth = encImTruth[:,::-1]
-                futImTruth = self.trainSet[:,start+self.encLen:start+self.encLen+self.futLen]
-                self.forwardProp(encImTruth, decImTruth, futImTruth,f,write=True)
+                futStart = start + self.encLen
+                futEnd = start + self.encLen + self.futLen
+                futImTruth = self.trainSet[:,futStart:futEnd]
+                self.forwardProp(encImTruth,decImTruth,futImTruth,f,write=True)
                 print "File: %02d, Iter: %04d, Dec: %2.2f, Fut: %2.2f" % \
                     (f, iteration, self.cost(decImTruth,self.decImOut),\
                      self.cost(futImTruth,self.futImOut))
@@ -297,3 +358,7 @@ class nnet(object):
 
             self.decFileHand.close()
             self.futFileHand.close()
+
+            
+
+        
