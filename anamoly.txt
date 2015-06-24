@@ -1,0 +1,31 @@
+#Blackboard
+
+##Ideas and Notes
+
+* Different temporal levels. Immediate anomaly (the image itself is anomalous), temporal anomaly (of various sizes). 
+
+* "Defining a noraml region which encompasses normal behavior" -> kernels in SVM, map input sequences to space where it is easier to classify/RNNs
+
+* Exploit relationship between data points. Difference to mean of data? 
+
+* Contextual attributes i.e. time, require time based models to detect. For example, it is NOT anomalous for some the door to open and close at 9 am, but is at 3 am. Does one include time as a separate feature? Or does one apply RNN to time sequences that are long and short (so apply it to a full 24 hour chunk along with smaller time steps)? Another example: low temperature in December is OK, but not in June.
+
+* Behavioral anomalies (more traditional). Particular instance is anomalous.
+
+* Collective anomalies: Query is not an anomaly, but three queries together that normally don't is. 
+
+* Should this be a generative model? What is the probability of this occuring? No labels to compare it to.
+
+* Benefit of anomaly detection on vision or images is that there are p
+
+* High false positive rate issue
+
+* How much should one overfit to data? 
+
+* How do we make system real time? If it takes a while to train is the system always behind the real time data?
+
+* Is out of the box anomaly detection possible?
+
+
+
+
