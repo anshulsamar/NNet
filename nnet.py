@@ -1,7 +1,4 @@
 import numpy as np
-import matplotlib.animation as ani
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import os
 import pickle
 import pdb
@@ -92,58 +89,6 @@ class nnet(object):
         #Other
         self.epsilon = 1e-5
 
-    def createTrainingSet(self):
-
-        carColor = .5
-        backgroundColor = 1
-        roads = [0] * 4
-        speed = [0] * 4
-        position = [0] * 4
-        count = 0
-        fileCount = 0
-
-        while (fileCount < self.numDataFiles):
-
-            trainSet = np.zeros((self.imSize,0))
-            trainSetNext = np.zeros((self.imSize,0))
-            count = 0
-
-            while (count < self.imPerFile + self.futLen):
-                dim = np.sqrt(self.imSize)
-                image = np.ones((dim,dim)) * backgroundColor
-                for i in range(0,4):
-                    if roads[i] == 1:
-                        if position[i] < np.sqrt(self.imSize) - 4:
-                            row = i*16 + 6
-                            position[i] = position[i] + speed[i]
-                            image[row:row+4,position[i]:position[i]+4] = carColor
-
-                        else:
-                            roads[i] = 0
-                            speed[i] = 0
-                            position[i] = 0
-                    else:
-                        if (np.random.uniform(0,1,1) < 0.25):
-                            roads[i] = 1
-                            position[i] = 0
-                            speedRand = np.random.uniform(0,1,1)
-                            if (speedRand < 1.0/3):
-                                speed[i] = 1
-                            elif (speedRand < 2.0/3):
-                                speed[i] = 2
-                            else:
-                                speed[i] = 4
-                            row = i*16 + 6
-                            column = 0
-                            image[row:row+4,column:column+4] = carColor
-                trainSet = np.hstack((trainSet,np.reshape(image,(self.imSize,1))))
-                count += 1
-
-            dFile = open(self.dataFile[:-2] + str(fileCount) + '.p','w')
-            pickle.dump(trainSet,dFile)
-            dFile.close()
-            fileCount += 1
-
     def act(self,z):
 
         return 1/(1 + np.exp(-1 * z))
@@ -212,8 +157,6 @@ class nnet(object):
             pickle.dump(self.decImOut,self.decFileHand)
             pickle.dump(self.futImOut,self.futFileHand)
       
-        pdb.set_trace()
-
     def backProp(self,encImTruth,decImTruth,futImTruth):
 
         # Decoder
@@ -221,16 +164,13 @@ class nnet(object):
         delDecIm = np.zeros((self.imSize, self.decLen))
         diff = self.decImOut[:,[-1]] - decImTruth[:,[-1]]
         delDecIm[:,[-1]] = diff * self.der(self.decImIn[:,[-1]])
-        delDec[:,[-1]] = np.dot(np.dot(self.outImW.T,delDecIm[:,[-1]]).T,\
-                               self.der(self.decIn[:,[-1]]))
+        delDec[:,[-1]] = np.dot(self.outImW.T,delDecIm[:,[-1]]) * self.der(self.decIn[:,[-1]])
 
         for i in range(0,self.decLen - 1)[::-1]:
             diff = self.decImOut[:,[i]] - decImTruth[:,[i]]
-            delDecIm[:,[i]] = np.dot(diff.T,self.der(self.decImIn[:,[i]]))
-            delFromIm = np.dot(np.dot(self.outImW.T,delDecIm[:,[i]]).T,\
-                               self.der(self.decIn[:,[i]]))
-            delFromTime = np.dot(np.dot(self.decW.T,delDec[:,[i+1]]).T,\
-                                 self.der(self.decIn[:,[i]]))
+            delDecIm[:,[i]] = diff * self.der(self.decImIn[:,[i]])
+            delFromIm = np.dot(self.outImW.T,delDecIm[:,[i]]) * self.der(self.decIn[:,[i]])
+            delFromTime = np.dot(self.decW.T,delDec[:,[i+1]]) * self.der(self.decIn[:,[i]])
             delDec[:,[i]] = delFromTime + delFromIm
 
         # Future
@@ -238,29 +178,25 @@ class nnet(object):
         delFutIm = np.zeros((self.imSize, self.futLen))
         diff = self.futImOut[:,[-1]] - futImTruth[:,[-1]]
         delFutIm[:,[-1]] = diff * self.der(self.futImIn[:,[-1]])
-        delFut[:,[-1]] = np.dot(np.dot(self.outImW.T,delFutIm[:,[-1]]).T,\
-                                self.der(self.futIn[:,[-1]]))
+        delFut[:,[-1]] = np.dot(self.outImW.T,delFutIm[:,[-1]]) * self.der(self.futIn[:,[-1]])
 
 
         for i in range(0,self.futLen - 1)[::-1]:
             diff = self.futImOut[:,[i]] - futImTruth[:,[i]]
-            delFutIm[:,[i]] = np.dot(diff.T,self.der(self.decImIn[:,[i]]))
-            delFromIm = np.dot(np.dot(self.outImW.T,delFutIm[:,[i]]).T,\
-                               self.der(self.futIn[:,[i]]))
-            delFromTime = np.dot(np.dot(self.futW.T,delFut[:,[i+1]]).T,\
-                                 self.der(self.futIn[:,[i]]))
+            delFutIm[:,[i]] = diff * self.der(self.decImIn[:,[i]])
+            delFromIm = np.dot(self.outImW.T,delFutIm[:,[i]]) * self.der(self.futIn[:,[i]])
+            delFromTime = np.dot(self.futW.T,delFut[:,[i+1]]) * self.der(self.futIn[:,[i]])
             delFut[:,[i]] = delFromTime + delFromIm
 
         # Encoder
         delEnc = np.zeros((self.units, self.encLen))
-        delEnc[:,[-1]] = np.dot((np.dot(self.encDecW.T,delDec[:,[0]]) + \
-                                np.dot(self.encFutW.T,delFut[:,[0]])).T,\
-                                self.der(self.encIn[:,[-1]]))
+        delEnc[:,[-1]] = (np.dot(self.encDecW.T,delDec[:,[0]]) + \
+                              np.dot(self.encFutW.T,delFut[:,[0]])) * \
+                              self.der(self.encIn[:,[-1]])
                              
         for i in range(0,self.encLen - 1)[::-1]:
-            delEnc[:,[i]] = np.dot(np.dot(self.encW.T,delEnc[:,[i+1]]).T,\
-                                   self.der(self.encIn[:,[i]]))
-        
+            delEnc[:,[i]] = np.dot(self.encW.T,delEnc[:,[i+1]]) * self.der(self.encIn[:,[i]])
+    
         # Encoder Update
         self.updateEncImW = np.dot(delEnc,encImTruth.T)
         self.encImW = self.encImW - self.alpha*self.updateEncImW
@@ -302,8 +238,8 @@ class nnet(object):
 
     def gradCheck(self):
 
-        pdb.set_trace()
         start = 0
+        iteration = 0
         self.trainSet = self.loadTrainingSet(0)
         encImTruth = self.trainSet[:,start:start+self.encLen]
         decImTruth = encImTruth[:,::-1]
@@ -330,115 +266,16 @@ class nnet(object):
         self.forwardProp(encImTruth, decImTruth, futImTruth,0,write=False)
         self.backProp(encImTruth, decImTruth, futImTruth)
         cost = self.cost(decImTruth,self.decImOut) + self.cost(futImTruth,self.futImOut)
-
-        diff = np.absolute(grad - self.updateEncImW[randRow,randCol])/(np.absolute(grad) + np.absolute(self.updateEncImW[randRow,randCol]))
-        print "Numerical: %2.6f Backprop: %2.6f Diff: %2.6f" % (grad,self.updateEncImW[randRow,randCol],diff)
+        diff = np.absolute(grad - self.updateEncImW[randRow,randCol])
+        weightedDiff = diff/(np.absolute(grad) + np.absolute(self.updateEncImW[randRow,randCol]))
+        print "Numerical: %2.6f Backprop: %2.6f Diff: %2.8f WeightedDiff: %2.8f" % (grad,self.updateEncImW[randRow,randCol],diff,weightedDiff)
         start = start + self.encLen
         iteration = iteration + 1
-        
-    def reshapeImageWithBorder(self,image):
-
-        dim = np.sqrt(len(image))
-        array = np.reshape(image,(dim,dim))
-        arrayBorder = np.zeros((dim+2,dim+2))
-        arrayBorder[1:1+dim,1:1+dim] = array
-        return arrayBorder
-
-    def viewImage(self,images,i):
-        plt.imshow(self.reshapeImageWithBorder(images[i]),cmap = 'gray')
-        plt.show()
-
-    def viewVideo(self,images,maxFrame):
-        
-        fig = plt.figure()
-        video = []
-        for im in images:
-            video.append(self.reshapeImageWithBorder(im))
-
-        vid = ani.FuncAnimation(fig,lambda i: plt.imshow(video[i],\
-              cmap='gray'),frames=maxFrame,interval=50,repeat=False)
-        plt.show()
-
-
-    def loadTrainingSet(self,fileNum):
-
-        trainSet = np.zeros((self.imSize,0))
-        trainFile = open(self.dataFile[:-2] + str(fileNum) + '.p','rb')
-        
-        while 1:
-            try:
-                trainSet = np.hstack((trainSet,pickle.load(trainFile)))
-            except (EOFError):
-                break
-                
-        trainFile.close()
-        return trainSet
-
-
-    def loadOutput(self,fileNum):
-
-        decIm = np.zeros((self.imSize,0))
-        decFile = open(self.decOutFile[:-2] + str(fileNum) + '.p','rb')
-
-        while 1:
-            try:
-                decIm = np.hstack((decIm,pickle.load(decFile)))
-            except (EOFError):
-                break
-
-        decFile.close()
-
-        futIm = np.zeros((self.imSize,0))
-        futFile = open(self.futOutFile[:-2] + str(fileNum) + '.p','rb')
-
-        while 1:
-            try:
-                futIm = np.hstack((futIm,pickle.load(futFile)))
-            except (EOFError):
-                break
-
-        futFile.close()
-
-        return [decIm,futIm]
-
-    def viewOutput(self,fileNum,frame=None):
-        
-        [decIm,futIm] = self.loadOutput(fileNum)
-        trainSet = self.loadTrainingSet(fileNum)
-
-        video = []
-        for i in range(0,self.imPerFile):
-            dim = np.sqrt(self.imSize)
-            enc = np.reshape(trainSet[:,[i]],(dim,dim))
-            dec = np.reshape(decIm[:,[self.decLen-i-1]],(dim,dim))
-            futTruth = np.reshape(trainSet[:,[i+self.encLen]],(dim,dim))
-            fut = np.reshape(futIm[:,[i]],(dim,dim))
-            array = np.zeros((2*dim+4,2*dim+4))
-            array[1:1+dim,1:1+dim] = enc
-            array[1:1+dim,2+dim:2+2*dim] = futTruth
-            array[2+dim:2+2*dim,1:1+dim] = dec
-            array[2+dim:2+2*dim,2+dim:2+2*dim] = fut
-            video.append(array)
-
-        if (frame != None):
-            plt.imshow(video[frame],cmap = 'gray')
-        else:
-            fig = plt.figure()
-            vid = ani.FuncAnimation(fig,lambda i: plt.imshow(video[i],\
-              cmap='gray'),frames=self.imPerFile,interval=1,repeat=False)
-        plt.show()
-
-    def dumpImages(self,images):
-
-        for i in range(0,len(images)):
-            plt.imshow(self.reshapeImageWithBorder(images[i]))
-            plt.savefig("train_" + str(i) + ".png")
 
     def run(self):
 
         for f in range(0,self.numDataFiles):
 
-            pdb.set_trace()
             iteration = 0
             start = 0
             self.trainSet = self.loadTrainingSet(f)
