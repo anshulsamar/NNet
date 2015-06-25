@@ -10,15 +10,17 @@ class nnet(object):
     def __init__(self):
 
         # Network parameters
-        self.units = 512
+        self.units = 2048
         self.layers = 1
         self.imSize = 64*64
         self.alpha = 1e-3
-        self.encLen = 2
-        self.decLen = 2
-        self.futLen = 2
+        self.encLen = 4
+        self.decLen = 4
+        self.futLen = 4
         self.trainLen = 100
         self.epochs = 1
+        self.currEpoch = 0
+        self.currFile = 0
         scale1 = 1/np.sqrt(self.imSize)
         scale2 = 1/np.sqrt(self.units)
 
@@ -55,9 +57,6 @@ class nnet(object):
         self.outImW = np.random.uniform(-scale2,scale2,(self.imSize,self.units))
         self.outImB = np.zeros((self.imSize,1))
 
-
-        self.W = [(self.encImW,self.units,self.imSize)]
-
         # Update and Loss
         self.updateEncImW = None
         self.updateEncImB = None
@@ -84,8 +83,8 @@ class nnet(object):
             os.remove(self.futOutFile)
 
         self.dataFile = 'data/data.p'
-        self.numDataFiles = 5
-        self.imPerFile = 100
+        self.numDataFiles = 3
+        self.imPerFile = 96
 
         #Other
         self.epsilon = 1e-5
@@ -360,10 +359,40 @@ class nnet(object):
                     print "Num: %2.6f BP: %2.6f Diff: %.2e WDiff: %.2e" % \
                   (grad[i],backPropGrad,diff,weightedDiff)
 
+    def saveNN(self):
+
+        NNFileHand = open(self.NNFile + '.p','w')
+        for W in [self.encImW,self.encImB,self.encW,\
+                  self.encDecW,self.decB,self.encFutW,self.futB,\
+                  self.decW, self.futW,self.outImW,self.outImB]:
+            pickle.dump(W,NNFileHand)
+
+        pickle.dump(self.currEpoch,NNFileHand)
+        NNFileHand.close()
+
+    def loadNN(self):
+
+        NNFileHand = open(self.NNFile + '.p','w')
+        self.encImW = pickle.load(NNFileHand)
+        self.encImB = pickle.load(NNFileHand)
+        self.encW = pickle.load(NNFileHand)
+        self.encDecW = pickle.load(NNFileHand)
+        self.decB = pickle.load(NNFileHand)
+        self.encFutW = pickle.load(NNFileHand)
+        self.futB = pickle.load(NNFileHand)
+        self.decW = pickle.load(NNFileHand)
+        self.futW = pickle.load(NNFileHand)
+        self.outImW = pickle.load(NNFileHand)
+        self.outImB = pickle.load(NNFileHand)
+        self.currEpoch = pickle.load(NNFileHand)
+
     def train(self):
 
-        for f in range(0,self.numDataFiles):
+        totalCostDec = 0
+        totalCostFut = 0
+        imageCount = 0
 
+        for f in range(0,self.numDataFiles):
             iteration = 0
             start = 0
             self.trainSet = dl.loadTrainingSet(self,f)
@@ -378,16 +407,22 @@ class nnet(object):
                 futEnd = start + self.encLen + self.futLen
                 futImTruth = self.trainSet[:,futStart:futEnd]
                 self.forwardProp(encImTruth,decImTruth,futImTruth,f,write=True)
-                print "File: %02d, Iter: %04d, Dec: %2.2f, Fut: %2.2f" % \
-                    (f, iteration, self.cost(decImTruth,self.decImOut),\
-                     self.cost(futImTruth,self.futImOut))
+                costDec = self.cost(decImTruth,self.decImOut)
+                costFut = self.cost(futImTruth,self.futImOut)
+                totalCostDec += costDec
+                totalCostFut += costFut
+                imageCount += 1
+                print "Epoch: %02d, File: %02d, Iter: %04d, Dec: %2.2f, Fut: %2.2f, ADec: %2.2f, AFut: %2.2f" % \
+                    (self.currEpoch, f, iteration, costDec, costFut, \
+                     totalCostDec/imageCount, totalCostFut/imageCount)
                 self.backProp(encImTruth, decImTruth, futImTruth)
-                start = start + self.encLen
-                iteration = iteration + 1
+                start += 1
+                iteration += 1
 
             self.decFileHand.close()
             self.futFileHand.close()
-
-            
+            self.decFileHand = ""
+            self.futFileHand = ""
+            self.trainSet = []
 
         
