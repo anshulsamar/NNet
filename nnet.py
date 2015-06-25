@@ -10,15 +10,13 @@ class nnet(object):
     def __init__(self):
 
         # Network parameters
-        self.arr = [1,2,3]
-        self.arr2 = [4,5,6]
         self.units = 512
         self.layers = 1
         self.imSize = 64*64
         self.alpha = 1e-3
-        self.encLen = 1
-        self.decLen = 1
-        self.futLen = 1
+        self.encLen = 2
+        self.decLen = 2
+        self.futLen = 2
         self.trainLen = 100
         self.epochs = 1
         scale1 = 1/np.sqrt(self.imSize)
@@ -60,8 +58,6 @@ class nnet(object):
 
         self.W = [(self.encImW,self.units,self.imSize)]
 
-        #Accessing array
-        #self.W = 
         # Update and Loss
         self.updateEncImW = None
         self.updateEncImB = None
@@ -129,11 +125,16 @@ class nnet(object):
             self.encOut[:,[i]] = self.act(self.encIn[:,[i]])
 
         # Decoder
-        self.decIn = np.zeros((self.units,self.decLen))
+        if (self.decLen == 0):
+            decLen = 1
+        else:
+            decLen = self.decLen
+            
+        self.decIn = np.zeros((self.units,decLen))
         self.decIn[:,[0]] = np.dot(self.encDecW,self.encOut[:,[-1]]) + self.decB
-        self.decOut = np.zeros((self.units,self.decLen))
-        self.decImIn = np.zeros((self.imSize,self.decLen))
-        self.decImOut = np.zeros((self.imSize,self.decLen))
+        self.decOut = np.zeros((self.units,decLen))
+        self.decImIn = np.zeros((self.imSize,decLen))
+        self.decImOut = np.zeros((self.imSize,decLen))
 
         for i in range(0,self.decLen):
             self.decOut[:,[i]] = self.act(self.decIn[:,[i]])
@@ -144,11 +145,17 @@ class nnet(object):
                 self.decIn[:,[i+1]] = np.dot(self.decW,self.decOut[:,[i]])
 
         # Future
-        self.futIn = np.zeros((self.units,self.futLen))
+        if (self.futLen == 0):
+            futLen = 1
+        else:
+            futLen = self.futLen
+
+        # Future
+        self.futIn = np.zeros((self.units,futLen))
         self.futIn[:,[0]] = np.dot(self.encFutW,self.encOut[:,[-1]]) + self.futB
-        self.futOut = np.zeros((self.units,self.futLen))
-        self.futImIn = np.zeros((self.imSize,self.futLen))
-        self.futImOut = np.zeros((self.imSize,self.futLen))
+        self.futOut = np.zeros((self.units,futLen))
+        self.futImIn = np.zeros((self.imSize,futLen))
+        self.futImOut = np.zeros((self.imSize,futLen))
 
         for i in range(0,self.futLen):
             self.futOut[:,[i]] = self.act(self.futIn[:,[i]])
@@ -165,8 +172,17 @@ class nnet(object):
     def backProp(self,encImTruth,decImTruth,futImTruth):
 
         # Decoder
-        delDec = np.zeros((self.units,self.decLen))
-        delDecIm = np.zeros((self.imSize, self.decLen))
+        if (np.shape(decImTruth)[1] == 0):
+            decImTruth = np.zeros((self.imSize,1))
+
+        # Decoder
+        if (self.decLen == 0):
+            decLen = 1
+        else:
+            decLen = self.decLen
+
+        delDec = np.zeros((self.units,decLen))
+        delDecIm = np.zeros((self.imSize, decLen))
         diff = self.decImOut[:,[-1]] - decImTruth[:,[-1]]
         delDecIm[:,[-1]] = diff * self.der(self.decImIn[:,[-1]])
         delDec[:,[-1]] = np.dot(self.outImW.T,delDecIm[:,[-1]]) * \
@@ -181,9 +197,20 @@ class nnet(object):
                           self.der(self.decIn[:,[i]])
             delDec[:,[i]] = delFromTime + delFromIm
 
+
         # Future
-        delFut = np.zeros((self.units,self.futLen))
-        delFutIm = np.zeros((self.imSize, self.futLen))
+        if (np.shape(futImTruth)[1] == 0):
+            futImTruth = np.zeros((self.imSize,1))
+
+        # Future
+        if (self.futLen == 0):
+            futLen = 1
+        else:
+            futLen = self.futLen
+
+        # Future
+        delFut = np.zeros((self.units,futLen))
+        delFutIm = np.zeros((self.imSize, futLen))
         diff = self.futImOut[:,[-1]] - futImTruth[:,[-1]]
         delFutIm[:,[-1]] = diff * self.der(self.futImIn[:,[-1]])
         delFut[:,[-1]] = np.dot(self.outImW.T,delFutIm[:,[-1]]) * \
@@ -192,7 +219,7 @@ class nnet(object):
 
         for i in range(0,self.futLen - 1)[::-1]:
             diff = self.futImOut[:,[i]] - futImTruth[:,[i]]
-            delFutIm[:,[i]] = diff * self.der(self.decImIn[:,[i]])
+            delFutIm[:,[i]] = diff * self.der(self.futImIn[:,[i]])
             delFromIm = np.dot(self.outImW.T,delFutIm[:,[i]]) * \
                         self.der(self.futIn[:,[i]])
             delFromTime = np.dot(self.futW.T,delFut[:,[i+1]]) * \
@@ -248,6 +275,8 @@ class nnet(object):
                                        (self.imSize,1))
         self.outImB = self.outImB - self.alpha*self.updateOutImB
 
+
+        #Update array
         self.update = [self.updateEncImW,self.updateEncImB, self.updateEncW,\
                        self.updateEncDecW,self.updateDecB,\
                        self.updateEncFutW,self.updateFutB,\
@@ -264,7 +293,7 @@ class nnet(object):
         f = np.random.randint(0,self.numDataFiles)
         self.trainSet = dl.loadTrainingSet(self,f)
         encImTruth = self.trainSet[:,start:start+self.encLen]
-        decImTruth = encImTruth[:,::-1]
+        decImTruth = self.trainSet[:,start:start+self.decLen][:,::-1]
         futImTruth = self.trainSet[:,\
             start+self.encLen:start+self.encLen+self.futLen]
 
@@ -344,7 +373,7 @@ class nnet(object):
             while (start <= self.imPerFile - self.encLen):
 
                 encImTruth = self.trainSet[:,start:start+self.encLen]
-                decImTruth = encImTruth[:,::-1]
+                decImTruth = self.trainSet[:,start:start+self.decLen][:,::-1]
                 futStart = start + self.encLen
                 futEnd = start + self.encLen + self.futLen
                 futImTruth = self.trainSet[:,futStart:futEnd]
