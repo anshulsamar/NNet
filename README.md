@@ -1,14 +1,1 @@
-Todo:
-- does anything fail if column order thigns don't work
-- Get something training
-- Groundtruth side by side to network output
-- Training infrastructure on deeps
-- LSTM vs normal vs relu
-- Learning rate, bias unit, optimization algorithm, momentum
-- Layers, convlutions, network architecture
-- Loss function
-- Cudamat and speed
-- Data
-- Weight Intialization
-- Paper reading list
-- Directory - deep/speech/vision?
+Encoder Decoder RNN for unsupervised learning on video sequences.
